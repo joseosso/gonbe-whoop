@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/recovery", label: "Recovery" },
   { href: "/sleep", label: "Sleep" },
   { href: "/strain", label: "Strain" },
+  { href: "/patterns", label: "Patterns" },
 ] as const;
 
 /** Dashboard section tabs. Carries the active `?from=&to=` range across pages. */
