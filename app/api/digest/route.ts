@@ -7,6 +7,8 @@ import { meanStdev } from "@/lib/analytics/baseline";
 import { dayOfWeekEffect } from "@/lib/analytics/day-of-week";
 import { densify, eachDay } from "@/lib/analytics/dates";
 import { tagDrivers } from "@/lib/analytics/driver-analysis";
+import { OVERVIEW_WINDOW } from "@/lib/analytics/overview";
+import { buildRadar, buildRadarSignals } from "@/lib/analytics/strain-radar";
 import {
   sleepDebt,
   SLEEP_DEBT_WINDOW,
@@ -17,6 +19,7 @@ import { isMeaningful, zScore } from "@/lib/analytics/zscore";
 import {
   getAllDayTags,
   getRecoveryDays,
+  getRecoverySeries,
   getSleepPerformanceDays,
   getSleepSeries,
   getStrainDays,
@@ -103,13 +106,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const debtFrom = shift(weekStart, -(SLEEP_DEBT_WINDOW - 1));
-    const [recovery, strain, sleepPerf, tags, debtSleeps] = await Promise.all([
-      getRecoveryDays(),
-      getStrainDays(),
-      getSleepPerformanceDays(),
-      getAllDayTags(),
-      getSleepSeries({ from: debtFrom, to: weekEnd }),
-    ]);
+    // Radar scores each signal's latest value vs its trailing 30-day baseline.
+    const radarRange = { from: shift(weekEnd, -(OVERVIEW_WINDOW + 1)), to: weekEnd };
+    // One sleep fetch covers both the debt (14-night) and radar (30-day)
+    // lookbacks; the radar's reaches further back, so use the earlier start.
+    const sleepFrom = radarRange.from < debtFrom ? radarRange.from : debtFrom;
+    const [recovery, strain, sleepPerf, tags, sleepWindow, radarRecovery] =
+      await Promise.all([
+        getRecoveryDays(),
+        getStrainDays(),
+        getSleepPerformanceDays(),
+        getAllDayTags(),
+        getSleepSeries({ from: sleepFrom, to: weekEnd }),
+        getRecoverySeries(radarRange),
+      ]);
 
     // Recovery: this week vs prior week.
     const recoveryInput = {
@@ -121,7 +131,7 @@ export async function POST(req: NextRequest) {
     };
 
     // Sleep debt at the week's start vs end (trailing 14-night sum).
-    const debtByDay = new Map(debtSleeps.map((s) => [s.day, s]));
+    const debtByDay = new Map(sleepWindow.map((s) => [s.day, s]));
     const nights: SleepNight[] = eachDay({ from: debtFrom, to: weekEnd }).map(
       (d) => {
         const s = debtByDay.get(d);
@@ -193,6 +203,23 @@ export async function POST(req: NextRequest) {
       ...weekAnomalies("Sleep", sleepPerf, anchorFrom, weekEnd, weekDays),
     ];
 
+    // Illness & strain early-warning radar: fuse the body-stress signals at
+    // week end vs each metric's own trailing baseline.
+    const radar = buildRadar(
+      buildRadarSignals(radarRecovery, sleepWindow, radarRange),
+    );
+    const earlyWarning =
+      radar.day === null
+        ? null
+        : {
+            status: radar.status,
+            breachCount: radar.breachCount,
+            drivers: radar.drivers.map((d) => ({
+              label: d.label,
+              z: d.z as number,
+            })),
+          };
+
     const input: DigestInput = {
       weekStart,
       recovery: recoveryInput,
@@ -201,6 +228,7 @@ export async function POST(req: NextRequest) {
       dayOfWeek,
       tagDriver,
       anomalies,
+      earlyWarning,
     };
     const payload = buildDigest(input);
     await saveDigest(weekStart, payload);

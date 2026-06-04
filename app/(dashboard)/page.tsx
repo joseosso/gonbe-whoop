@@ -1,9 +1,17 @@
-import { Activity, CheckCircle2, Database, Moon, Zap } from "lucide-react";
+import {
+  Activity,
+  CheckCircle2,
+  Database,
+  Moon,
+  ShieldAlert,
+  Zap,
+} from "lucide-react";
 
 import {
   MetricCard,
   type MetricCardProps,
 } from "@/components/charts/metric-card";
+import { StrainRadar } from "@/components/charts/strain-radar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +24,11 @@ import {
 import { SyncButton } from "@/components/sync-button";
 import { densify } from "@/lib/analytics/dates";
 import { summarizeMetric } from "@/lib/analytics/overview";
+import {
+  buildRadar,
+  buildRadarSignals,
+  type RadarResult,
+} from "@/lib/analytics/strain-radar";
 import type { DaySeries } from "@/lib/analytics/types";
 import { formatRangeLabel, parseRange } from "@/lib/date-range";
 import {
@@ -58,6 +71,7 @@ export default async function OverviewPage({
   let connected = false;
   let summary: DataSummary | null = null;
   let metrics: Metric[] = [];
+  let radar: RadarResult | null = null;
   let setupError: string | null = null;
 
   try {
@@ -100,6 +114,10 @@ export default async function OverviewPage({
         ),
       ),
     ];
+
+    // Illness & strain early-warning radar: fuse the body-stress signals
+    // (skin temp, RHR, HRV, resp rate, SpO2) vs each metric's own baseline.
+    radar = buildRadar(buildRadarSignals(recovery, sleep, range));
   } catch (e) {
     setupError =
       e instanceof Error ? e.message : "Could not reach the database.";
@@ -123,11 +141,31 @@ export default async function OverviewPage({
               <MetricCard key={m.label} {...m} />
             ))}
           </section>
+          {radar && <EarlyWarningCard radar={radar} />}
           <ConnectionCard connected={connected} />
           {summary && <DataSummaryGrid summary={summary} />}
         </div>
       )}
     </div>
+  );
+}
+
+function EarlyWarningCard({ radar }: { radar: RadarResult }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldAlert className="size-4" /> Illness &amp; strain early-warning
+        </CardTitle>
+        <CardDescription>
+          Skin temp, resting HR, HRV, respiratory rate, and SpO₂ fused against
+          your own baselines. ≥ 2 signals off baseline flags a watch.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <StrainRadar result={radar} />
+      </CardContent>
+    </Card>
   );
 }
 
