@@ -16,8 +16,13 @@ import { eachDay, localClockMinutes } from "@/lib/analytics/dates";
 import { regularityIndex, type Regularity } from "@/lib/analytics/regularity";
 import { sleepDebt, type SleepNight } from "@/lib/analytics/sleep-debt";
 import { buildTrend, type TrendPoint } from "@/lib/analytics/trend";
-import { formatRangeLabel, parseRange } from "@/lib/date-range";
-import { getSleepSeries } from "@/lib/db/queries";
+import type { EventRow } from "@/lib/analytics/types";
+import {
+  clampEventsToRange,
+  formatRangeLabel,
+  parseRange,
+} from "@/lib/date-range";
+import { getEvents, getSleepSeries } from "@/lib/db/queries";
 
 // Reads live DB state on every request — never prerender.
 export const dynamic = "force-dynamic";
@@ -43,10 +48,15 @@ export default async function SleepPage({
   let performance: TrendPoint[] = [];
   let efficiency: TrendPoint[] = [];
   let regularity: Regularity = { index: null, bedR: null, wakeR: null, n: 0 };
+  let events: EventRow[] = [];
   let error: string | null = null;
 
   try {
-    const sleeps = await getSleepSeries(range);
+    const [sleeps, eventRows] = await Promise.all([
+      getSleepSeries(range),
+      getEvents(range),
+    ]);
+    events = clampEventsToRange(eventRows, range);
     const byDay = new Map(sleeps.map((s) => [s.day, s]));
     const days = eachDay(range);
 
@@ -122,7 +132,7 @@ export default async function SleepPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <SleepStagesChart data={stages} />
+              <SleepStagesChart data={stages} events={events} />
             </CardContent>
           </Card>
 
@@ -135,7 +145,7 @@ export default async function SleepPage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <TrendChart data={performance} unit="%" />
+                <TrendChart data={performance} unit="%" events={events} />
               </CardContent>
             </Card>
             <Card>
@@ -146,7 +156,7 @@ export default async function SleepPage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <TrendChart data={efficiency} unit="%" />
+                <TrendChart data={efficiency} unit="%" events={events} />
               </CardContent>
             </Card>
           </div>
@@ -160,7 +170,7 @@ export default async function SleepPage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <SleepDebtChart data={debt} />
+                <SleepDebtChart data={debt} events={events} />
               </CardContent>
             </Card>
             <RegularityCard regularity={regularity} />

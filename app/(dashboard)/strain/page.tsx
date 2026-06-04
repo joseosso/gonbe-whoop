@@ -14,8 +14,14 @@ import {
   type StrainRecoveryPoint,
 } from "@/lib/analytics/strain-balance";
 import { buildTrend, type TrendPoint } from "@/lib/analytics/trend";
-import { formatRangeLabel, parseRange } from "@/lib/date-range";
+import type { EventRow } from "@/lib/analytics/types";
 import {
+  clampEventsToRange,
+  formatRangeLabel,
+  parseRange,
+} from "@/lib/date-range";
+import {
+  getEvents,
   getRecoverySeries,
   getStrainSeries,
   getWorkouts,
@@ -37,14 +43,17 @@ export default async function StrainPage({
   let scatter: StrainRecoveryPoint[] = [];
   let zones: ZonePoint[] = [];
   let flaggedCount = 0;
+  let events: EventRow[] = [];
   let error: string | null = null;
 
   try {
-    const [strain, recovery, workouts] = await Promise.all([
+    const [strain, recovery, workouts, eventRows] = await Promise.all([
       getStrainSeries(range),
       getRecoverySeries(range),
       getWorkouts(range),
+      getEvents(range),
     ]);
+    events = clampEventsToRange(eventRows, range);
 
     strainTrend = buildTrend(
       strain.map((s) => ({ day: s.day, value: s.strain })),
@@ -101,7 +110,7 @@ export default async function StrainPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <TrendChart data={strainTrend} precision={1} />
+              <TrendChart data={strainTrend} precision={1} events={events} />
             </CardContent>
           </Card>
 
@@ -128,7 +137,7 @@ export default async function StrainPage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <HrZoneBar data={zones} />
+                <HrZoneBar data={zones} events={events} />
               </CardContent>
             </Card>
           </div>

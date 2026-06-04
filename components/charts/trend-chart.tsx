@@ -13,12 +13,16 @@ import {
 } from "recharts";
 
 import type { TrendPoint } from "@/lib/analytics/trend";
+import type { EventRow } from "@/lib/analytics/types";
+import { eventReferences } from "./event-overlay";
 
 export interface TrendChartProps {
   data: TrendPoint[];
   /** Appended to values in the axis/tooltip, e.g. `"ms"`, `"bpm"`. */
   unit?: string;
   precision?: number;
+  /** Life events to overlay, clamped to the chart's day range. */
+  events?: EventRow[];
 }
 
 const shortDay = (day: string) => format(parseISO(day), "MMM d");
@@ -27,7 +31,12 @@ const shortDay = (day: string) => format(parseISO(day), "MMM d");
  * Raw series with an EWMA overlay and a shaded trailing baseline ± SD band
  * (SPEC §5). Parameterized by metric — used for HRV, RHR, and other trends.
  */
-export function TrendChart({ data, unit = "", precision = 0 }: TrendChartProps) {
+export function TrendChart({
+  data,
+  unit = "",
+  precision = 0,
+  events,
+}: TrendChartProps) {
   const hasData = data.some((d) => d.raw !== null);
   if (!hasData) {
     return (
@@ -111,6 +120,7 @@ export function TrendChart({ data, unit = "", precision = 0 }: TrendChartProps) 
           isAnimationActive={false}
           connectNulls
         />
+        {eventReferences(events)}
       </ComposedChart>
     </ResponsiveContainer>
   );

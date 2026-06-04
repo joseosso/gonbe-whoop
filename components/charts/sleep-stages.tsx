@@ -12,6 +12,9 @@ import {
   YAxis,
 } from "recharts";
 
+import type { EventRow } from "@/lib/analytics/types";
+import { eventReferences } from "./event-overlay";
+
 const shortDay = (day: string) => format(parseISO(day), "MMM d");
 const longDay = (label: unknown) =>
   typeof label === "string" ? format(parseISO(label), "EEE, MMM d") : "";
@@ -42,7 +45,13 @@ const STAGES = [
 const hrs = (v: number) => `${v.toFixed(1)} h`;
 
 /** Stacked-area sleep stages over the range. */
-export function SleepStagesChart({ data }: { data: StagePoint[] }) {
+export function SleepStagesChart({
+  data,
+  events,
+}: {
+  data: StagePoint[];
+  events?: EventRow[];
+}) {
   if (!data.some((d) => d.light !== null)) {
     return (
       <p className="text-muted-foreground py-12 text-center text-sm">
@@ -92,6 +101,7 @@ export function SleepStagesChart({ data }: { data: StagePoint[] }) {
             connectNulls={false}
           />
         ))}
+        {eventReferences(events)}
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -103,7 +113,13 @@ export interface DebtPoint {
   hours: number | null;
 }
 
-export function SleepDebtChart({ data }: { data: DebtPoint[] }) {
+export function SleepDebtChart({
+  data,
+  events,
+}: {
+  data: DebtPoint[];
+  events?: EventRow[];
+}) {
   if (!data.some((d) => d.hours !== null)) {
     return (
       <p className="text-muted-foreground py-12 text-center text-sm">
@@ -152,6 +168,7 @@ export function SleepDebtChart({ data }: { data: DebtPoint[] }) {
           isAnimationActive={false}
           connectNulls
         />
+        {eventReferences(events)}
       </AreaChart>
     </ResponsiveContainer>
   );

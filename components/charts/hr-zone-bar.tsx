@@ -11,6 +11,9 @@ import {
   YAxis,
 } from "recharts";
 
+import type { EventRow } from "@/lib/analytics/types";
+import { eventReferences } from "./event-overlay";
+
 const shortDay = (day: string) => format(parseISO(day), "MMM d");
 const longDay = (label: unknown) =>
   typeof label === "string" ? format(parseISO(label), "EEE, MMM d") : "";
@@ -39,7 +42,13 @@ const ZONES = [
 const mins = (v: number) => `${Math.round(v)} min`;
 
 /** Stacked HR-zone time per day. */
-export function HrZoneBar({ data }: { data: ZonePoint[] }) {
+export function HrZoneBar({
+  data,
+  events,
+}: {
+  data: ZonePoint[];
+  events?: EventRow[];
+}) {
   const hasData = data.some(
     (d) => d.z0 + d.z1 + d.z2 + d.z3 + d.z4 + d.z5 > 0,
   );
@@ -94,6 +103,7 @@ export function HrZoneBar({ data }: { data: ZonePoint[] }) {
             isAnimationActive={false}
           />
         ))}
+        {eventReferences(events)}
       </BarChart>
     </ResponsiveContainer>
   );
