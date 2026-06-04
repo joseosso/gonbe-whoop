@@ -12,11 +12,13 @@ import type {
   StrainDay,
   WorkoutRow,
 } from "@/lib/analytics/types";
+import type { DigestPayload } from "@/lib/insights/digest";
 import { db } from "./client";
 import {
   cycles,
   dayTags,
   events,
+  insightsCache,
   recoveries,
   sleeps,
   syncState,
@@ -331,6 +333,45 @@ export async function getEvents(range: DayRange): Promise<EventRow[]> {
     )
     .orderBy(asc(events.startDay));
   return rows;
+}
+
+/** A cached weekly digest plus when it was generated. */
+export interface CachedDigest {
+  weekStart: string;
+  payload: DigestPayload;
+  generatedAt: Date;
+}
+
+/** The most recently generated weekly digest, or `null` if none cached. */
+export async function getLatestDigest(): Promise<CachedDigest | null> {
+  const [row] = await db
+    .select()
+    .from(insightsCache)
+    .orderBy(desc(insightsCache.weekStart))
+    .limit(1);
+  if (!row) return null;
+  return {
+    weekStart: row.weekStart,
+    payload: row.payload as DigestPayload,
+    generatedAt: row.generatedAt,
+  };
+}
+
+/**
+ * Upsert a weekly digest, keyed by `week_start` so regeneration is idempotent
+ * (one row per week; the latest run overwrites and re-stamps `generated_at`).
+ */
+export async function saveDigest(
+  weekStart: string,
+  payload: DigestPayload,
+): Promise<void> {
+  await db
+    .insert(insightsCache)
+    .values({ weekStart, payload })
+    .onConflictDoUpdate({
+      target: insightsCache.weekStart,
+      set: { payload, generatedAt: sql`now()` },
+    });
 }
 
 /**

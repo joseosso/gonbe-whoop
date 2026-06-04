@@ -13,6 +13,7 @@ const ITEMS = [
   { href: "/patterns", label: "Patterns" },
   { href: "/compare", label: "Compare" },
   { href: "/tags", label: "Tags" },
+  { href: "/digest", label: "Digest" },
 ] as const;
 
 /** Dashboard section tabs. Carries the active `?from=&to=` range across pages. */
