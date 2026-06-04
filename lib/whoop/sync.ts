@@ -1,4 +1,5 @@
 import { getTableColumns, sql } from "drizzle-orm";
+import { toSnakeCase } from "drizzle-orm/casing";
 import type { PgTable } from "drizzle-orm/pg-core";
 
 import { db } from "@/lib/db/client";
@@ -127,7 +128,13 @@ async function upsert<T extends PgTable>(
   const set = Object.fromEntries(
     Object.entries(columns)
       .filter(([key]) => key !== conflictTarget)
-      .map(([key, col]) => [key, sql`excluded.${sql.identifier(col.name)}`]),
+      .map(([key, col]) => {
+        // Implicit-name columns store the JS key in `col.name`; the DB name is
+        // derived via the configured casing. Match Drizzle's own rule so the
+        // EXCLUDED reference uses the real column name (e.g. start_time).
+        const name = col.keyAsName ? toSnakeCase(col.name) : col.name;
+        return [key, sql`excluded.${sql.identifier(name)}`];
+      }),
   );
 
   const target = (table as Record<string, unknown>)[conflictTarget];
