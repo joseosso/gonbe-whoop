@@ -11,8 +11,8 @@ import { OVERVIEW_WINDOW } from "@/lib/analytics/overview";
 import { buildRadar, buildRadarSignals } from "@/lib/analytics/strain-radar";
 import {
   sleepDebt,
+  sleepNights,
   SLEEP_DEBT_WINDOW,
-  type SleepNight,
 } from "@/lib/analytics/sleep-debt";
 import type { Day, DayRange, DaySeries } from "@/lib/analytics/types";
 import { isMeaningful, zScore } from "@/lib/analytics/zscore";
@@ -53,12 +53,6 @@ function meanOver(series: DaySeries, range: DayRange): number | null {
     .filter((v): v is number => v !== null);
   return meanStdev(values).mean;
 }
-
-/** Sum of components, or null when every component is missing. */
-const sumOrNull = (parts: (number | null)[]) =>
-  parts.every((p) => p === null)
-    ? null
-    : parts.reduce<number>((acc, p) => acc + (p ?? 0), 0);
 
 /**
  * Flag this week's days whose value deviates |z| ≥ 1.5 from the trailing
@@ -131,25 +125,7 @@ export async function POST(req: NextRequest) {
     };
 
     // Sleep debt at the week's start vs end (trailing 14-night sum).
-    const debtByDay = new Map(sleepWindow.map((s) => [s.day, s]));
-    const nights: SleepNight[] = eachDay({ from: debtFrom, to: weekEnd }).map(
-      (d) => {
-        const s = debtByDay.get(d);
-        return {
-          day: d,
-          needMilli: s
-            ? sumOrNull([
-                s.needBaselineMilli,
-                s.needFromDebtMilli,
-                s.needFromStrainMilli,
-              ])
-            : null,
-          actualMilli: s
-            ? sumOrNull([s.lightMilli, s.swsMilli, s.remMilli])
-            : null,
-        };
-      },
-    );
+    const nights = sleepNights(sleepWindow, { from: debtFrom, to: weekEnd });
     const debtByDayMilli = new Map(
       sleepDebt(nights).map((p) => [p.day, p.debtMilli]),
     );
