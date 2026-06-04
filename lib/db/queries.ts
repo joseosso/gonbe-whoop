@@ -1,4 +1,4 @@
-import { and, asc, between, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, between, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { addDays, parseISO, subDays } from "date-fns";
 
 import { toLocalDay } from "@/lib/analytics/dates";
@@ -265,6 +265,48 @@ export async function getDayTags(range: DayRange): Promise<DayTagRow[]> {
     .where(between(dayTags.day, range.from, range.to))
     .orderBy(asc(dayTags.day), asc(dayTags.tag));
   return rows;
+}
+
+/** Every user-authored day tag (full history), for driver analysis. */
+export async function getAllDayTags(): Promise<DayTagRow[]> {
+  return db
+    .select({ day: dayTags.day, tag: dayTags.tag, note: dayTags.note })
+    .from(dayTags)
+    .orderBy(asc(dayTags.day), asc(dayTags.tag));
+}
+
+/** Full-history daily HRV (rMSSD millis), bucketed by the cycle's local day. */
+export async function getHrvDays(): Promise<DaySeries> {
+  const rows = await db
+    .select({
+      startTime: cycles.startTime,
+      tzOffset: cycles.tzOffset,
+      hrvRmssdMilli: recoveries.hrvRmssdMilli,
+    })
+    .from(recoveries)
+    .innerJoin(cycles, eq(recoveries.cycleId, cycles.id))
+    .orderBy(asc(cycles.startTime));
+
+  return byDay(
+    rows.map((r) => ({
+      day: toLocalDay(r.startTime, r.tzOffset),
+      value: r.hrvRmssdMilli,
+    })),
+  );
+}
+
+/** Every event (full history), most recent first, for the event editor. */
+export async function getAllEvents(): Promise<EventRow[]> {
+  return db
+    .select({
+      id: events.id,
+      startDay: events.startDay,
+      endDay: events.endDay,
+      label: events.label,
+      type: events.type,
+    })
+    .from(events)
+    .orderBy(desc(events.startDay));
 }
 
 /**

@@ -34,6 +34,13 @@ export function localClockMinutes(
 /** Anchor a `YYYY-MM-DD` day at midnight UTC, so day math is DST-immune. */
 const dayToUtc = (day: Day): Date => new Date(`${day}T00:00:00.000Z`);
 
+/** The calendar day after `day` (DST-immune: steps a fixed 24h at midnight UTC). */
+export function nextDay(day: Day): Day {
+  return new Date(dayToUtc(day).getTime() + MS_PER_DAY)
+    .toISOString()
+    .slice(0, 10);
+}
+
 /** Every calendar day in `range`, inclusive, ascending. */
 export function eachDay(range: DayRange): Day[] {
   const out: Day[] = [];
