@@ -56,8 +56,8 @@ insights that the WHOOP app itself doesn't give you.
 | Styling | **Tailwind CSS + shadcn/ui** | Requested; minimalist modern UI |
 | DB access | **Drizzle ORM** (`postgres` driver) | Type-safe analytics queries + migrations |
 | DB | **Supabase Postgres** (free tier) | Requested; durable local cache of Whoop data |
-| Standard charts | **shadcn charts (Recharts)** | First-class shadcn integration |
-| Specialized charts | **nivo** (`@nivo/calendar`, `@nivo/heatmap`) | Calendar heatmap + correlation matrix |
+| Standard charts | **shadcn charts (Recharts)** | First-class shadcn integration, themed cards/lines |
+| Specialized charts | **visx** (`@visx/*`) | Low-level D3 primitives → bespoke, animated calendar heatmap, correlation matrix, radial/scatter |
 | Dates | **date-fns** + `date-fns-tz` | Timezone-correct day bucketing |
 | Validation | **zod** | Validate Whoop API payloads at the boundary |
 
@@ -300,7 +300,7 @@ rule-based digest.
 
 ### Phase 1 — Core dashboards (exploratory viz)
 - **Overview**: recovery / strain / sleep cards vs 30-day baseline with z-score band.
-- **Recovery calendar heatmap** (`@nivo/calendar`, color = recovery).
+- **Recovery calendar heatmap** (custom visx, color = recovery).
 - **HRV & RHR trends**: raw + EWMA + 30-day band.
 - **Sleep dashboard**: stacked-area stages, performance/efficiency trends,
   **sleep debt** chart, **regularity** score.
@@ -352,12 +352,13 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 
 ---
 
-## 9. Open questions / things to confirm during build
-- **Drizzle vs `supabase-js`** as the primary data layer (spec assumes Drizzle).
-- **nivo vs visx** for the calendar heatmap & correlation matrix (spec assumes nivo).
-- Initial **tag vocabulary** for `day_tags` (alcohol, late_meal, caffeine_late,
-  travel, sick, stress, …) — easy to extend; what set do you want on day one?
-- Backfill depth: all available history (default) vs a bounded window.
+## 9. Resolved decisions
+- **Data layer:** Drizzle ORM over Supabase Postgres. ✅
+- **Visualization:** shadcn/Recharts for standard charts; **visx** for the
+  bespoke/specialized ones (calendar heatmap, correlation matrix). ✅
+- **Initial tag vocabulary** for `day_tags`: **travel, sick, stress** on day one
+  (schema/UI allow adding more later). ✅
+- **Backfill depth:** **all available history.** ✅
 
 ---
 
