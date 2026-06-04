@@ -1,3 +1,4 @@
+import { AcwrGauge } from "@/components/charts/acwr-gauge";
 import { HrZoneBar, type ZonePoint } from "@/components/charts/hr-zone-bar";
 import { StrainRecoveryScatter } from "@/components/charts/strain-recovery-scatter";
 import { TrendChart } from "@/components/charts/trend-chart";
@@ -8,7 +9,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { eachDay } from "@/lib/analytics/dates";
+import { acwrSeries, currentAcwr, type AcwrPoint } from "@/lib/analytics/acwr";
+import { densify, eachDay } from "@/lib/analytics/dates";
+import { summarizeMetric } from "@/lib/analytics/overview";
 import {
   flagStrainRecovery,
   type StrainRecoveryPoint,
@@ -43,6 +46,8 @@ export default async function StrainPage({
   let scatter: StrainRecoveryPoint[] = [];
   let zones: ZonePoint[] = [];
   let flaggedCount = 0;
+  let acwr: AcwrPoint | null = null;
+  let hrvZ: number | null = null;
   let events: EventRow[] = [];
   let error: string | null = null;
 
@@ -59,6 +64,25 @@ export default async function StrainPage({
       strain.map((s) => ({ day: s.day, value: s.strain })),
       range,
     );
+
+    // ACWR (overtraining watch): trailing 7d vs 28d mean strain over a
+    // densified series so the windows are calendar-aligned. The latest point
+    // has a full chronic window whenever the range spans ≥ 28 days.
+    acwr = currentAcwr(
+      acwrSeries(
+        densify(
+          strain.map((s) => ({ day: s.day, value: s.strain })),
+          range,
+        ),
+      ),
+    );
+    // HRV deviation from its own 30-day baseline, as a supporting signal.
+    hrvZ = summarizeMetric(
+      densify(
+        recovery.map((r) => ({ day: r.day, value: r.hrvRmssdMilli })),
+        range,
+      ),
+    ).z;
 
     // Same-day strain vs recovery, only where both exist.
     const recoveryByDay = new Map(
@@ -102,17 +126,30 @@ export default async function StrainPage({
         <p className="text-destructive text-sm">{error}</p>
       ) : (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Daily strain</CardTitle>
-              <CardDescription>
-                Cycle strain with EWMA and 30-day baseline band.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <TrendChart data={strainTrend} precision={1} events={events} />
-            </CardContent>
-          </Card>
+          <div className="grid gap-6 lg:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle>Overtraining watch</CardTitle>
+                <CardDescription>
+                  Acute:chronic workload ratio (7d ÷ 28d strain).
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AcwrGauge point={acwr} hrvZ={hrvZ} />
+              </CardContent>
+            </Card>
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle>Daily strain</CardTitle>
+                <CardDescription>
+                  Cycle strain with EWMA and 30-day baseline band.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TrendChart data={strainTrend} precision={1} events={events} />
+              </CardContent>
+            </Card>
+          </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
