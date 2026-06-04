@@ -4,8 +4,9 @@ A personal, local-first web app that syncs your WHOOP data into a Supabase
 Postgres database and surfaces the trends, comparisons, and decision-support
 insights that the WHOOP app itself doesn't give you.
 
-> Status: **Spec for review.** No application code written yet. This document is
-> the contract we agree on before implementation begins.
+> Status: **Phase 0 implemented.** Scaffold, schema/migrations, WHOOP OAuth +
+> refresh, and the incremental sync engine are built and working. Remaining work
+> (dashboards, insights, deploy) is tracked in `IMPLEMENTATION_PLAN.md`.
 
 ---
 
@@ -85,11 +86,11 @@ Base URL: `https://api.prod.whoop.com/developer`
 | Resource | Endpoint | Notes |
 |---|---|---|
 | Cycles | `GET /v2/cycle` | Daily physiological cycle; integer `id` |
-| Recovery | `GET /v2/recovery` | One per cycle; keyed by `cycle_id` + `sleep_id` |
+| Recovery | `GET /v2/recovery` | One per cycle; PK `cycle_id`, carries `sleep_id` |
 | Sleep | `GET /v2/activity/sleep` | **UUID `id`** in v2 (was int in v1) |
-| Workouts | `GET /v2/activity/workout` | **UUID `id`** in v2; `sport_id`/name |
-| Profile | `GET /v2/user/profile/basic` | name, email, user_id |
-| Body | `GET /v2/user/measurement/body` | height, weight, max HR |
+| Workouts | `GET /v2/activity/workout` | **UUID `id`** in v2; `sport_name` (`sport_id` deprecated → often `null`) |
+| Profile | `GET /v2/user/profile/basic` | name, email, user_id — *not yet synced (no table); planned* |
+| Body | `GET /v2/user/measurement/body` | height, weight, max HR — *not yet synced (no table); planned* |
 
 ### Pagination & filtering
 - Query params: `start`, `end` (ISO-8601), `limit` (max 25), `nextToken`.
@@ -112,9 +113,12 @@ Base URL: `https://api.prod.whoop.com/developer`
   `score.respiratory_rate`, `score.sleep_needed.*`, and
   `score.stage_summary.*` (in-bed, awake, light, SWS, REM, no-data millis,
   `disturbance_count`, `sleep_cycle_count`), `nap` flag.
-- **Workout**: `sport_id`/name, `score.strain`, `average_heart_rate`,
-  `max_heart_rate`, `kilojoule`, `distance_meter`, `altitude_gain_meter`,
-  `score.zone_duration.zone_zero..five_milli`.
+- **Workout**: `sport_name` (and deprecated `sport_id`), `score.strain`,
+  `average_heart_rate`, `max_heart_rate`, `kilojoule`, `distance_meter`,
+  `altitude_gain_meter`, `score.zone_durations.zone_zero..five_milli`.
+  - *Note:* WHOOP returns the full `score` object with `null` leaves for
+    inapplicable metrics (e.g. `distance_meter` on strength workouts), so the
+    zod boundary treats score fields as nullable.
 
 ---
 
@@ -291,12 +295,15 @@ rule-based digest.
 
 ## 6. Feature & UI breakdown (phased)
 
-### Phase 0 — Foundation
+### Phase 0 — Foundation ✅ done
 - Scaffold Next.js + Tailwind + shadcn; Supabase project + Drizzle schema/migrations.
 - WHOOP OAuth (connect screen → callback → token store) + refresh logic.
 - Sync engine: full backfill → incremental; re-sync trailing ~7 days to catch
-  re-scores. "Sync now" button + last-synced + progress indicator.
+  re-scores. "Sync now" button + last-synced + count summary.
 - **Exit criteria:** full Whoop history present in Postgres, re-runnable idempotently.
+- *Shipped:* OAuth + refresh, idempotent upsert sync of cycles/recoveries/
+  sleeps/workouts, home page with connection state + sync button + row counts.
+  (Profile/body endpoints and a mid-backfill progress indicator are not built.)
 
 ### Phase 1 — Core dashboards (exploratory viz)
 - **Overview**: recovery / strain / sleep cards vs 30-day baseline with z-score band.
