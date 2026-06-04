@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   densify,
   eachDay,
+  localClockMinutes,
   toLocalDay,
   weekdayIndex,
   weekdayName,
@@ -50,6 +51,23 @@ describe("toLocalDay", () => {
     // 23:00Z + 05:30 = 04:30 the next day.
     expect(toLocalDay(new Date("2024-06-15T23:00:00Z"), "+05:30")).toBe(
       "2024-06-16",
+    );
+  });
+});
+
+describe("localClockMinutes", () => {
+  it("returns local minute-of-day, applying the offset", () => {
+    // 05:30Z − 08:00 = 21:30 local → 1290.
+    expect(
+      localClockMinutes(new Date("2024-06-15T05:30:00Z"), "-08:00"),
+    ).toBe(21 * 60 + 30);
+    // 23:30Z + 02:00 = 01:30 local → 90.
+    expect(
+      localClockMinutes(new Date("2024-06-15T23:30:00Z"), "+02:00"),
+    ).toBe(90);
+    // null offset → UTC.
+    expect(localClockMinutes(new Date("2024-06-15T07:15:00Z"), null)).toBe(
+      7 * 60 + 15,
     );
   });
 });
