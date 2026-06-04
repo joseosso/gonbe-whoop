@@ -11,6 +11,7 @@ const base: DigestInput = {
   dayOfWeek: null,
   tagDriver: null,
   anomalies: [],
+  earlyWarning: null,
 };
 
 const card = (input: Partial<DigestInput>, id: string) =>
@@ -102,6 +103,49 @@ describe("buildDigest", () => {
       expect(
         card({ tagDriver: { tag: "x", delta: 1, n: 9, lowConfidence: false } }, "tag-driver"),
       ).toBeUndefined();
+    });
+  });
+
+  describe("early-warning", () => {
+    it("stays silent when status is ok", () => {
+      expect(
+        card(
+          { earlyWarning: { status: "ok", breachCount: 1, drivers: [] } },
+          "early-warning",
+        ),
+      ).toBeUndefined();
+    });
+    it("flags a watch with the driving signals", () => {
+      const c = card(
+        {
+          earlyWarning: {
+            status: "watch",
+            breachCount: 2,
+            drivers: [
+              { label: "Skin temp", z: 1.8 },
+              { label: "HRV", z: -1.6 },
+            ],
+          },
+        },
+        "early-warning",
+      );
+      expect(c?.severity).toBe("watch");
+      expect(c?.title).toContain("2 body-stress signals");
+      expect(c?.detail).toContain("Skin temp (z=+1.8)");
+      expect(c?.detail).toContain("HRV (z=-1.6)");
+    });
+    it("escalates to alert at three signals", () => {
+      const c = card(
+        {
+          earlyWarning: {
+            status: "alert",
+            breachCount: 3,
+            drivers: [{ label: "Resting HR", z: 2.1 }],
+          },
+        },
+        "early-warning",
+      );
+      expect(c?.severity).toBe("alert");
     });
   });
 

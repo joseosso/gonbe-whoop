@@ -102,8 +102,8 @@ function EmptyState() {
         <CardTitle>No digest yet</CardTitle>
         <CardDescription>
           Generate this week&apos;s digest to see a rule-based read on your
-          recovery trend, sleep debt, training load, weekday patterns, tag
-          drivers, and anomalies.
+          illness early-warning signals, recovery trend, sleep debt, training
+          load, weekday patterns, tag drivers, and anomalies.
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -1,4 +1,5 @@
 import type { AcwrStatus } from "@/lib/analytics/acwr";
+import type { RadarStatus } from "@/lib/analytics/strain-radar";
 import type { Day } from "@/lib/analytics/types";
 
 /**
@@ -50,6 +51,12 @@ export interface DigestInput {
   } | null;
   /** This week's |z| ≥ 1.5 anomalies. */
   anomalies: DigestAnomaly[];
+  /** Current illness/strain early-warning radar status + driving signals. */
+  earlyWarning: {
+    status: RadarStatus;
+    breachCount: number;
+    drivers: { label: string; z: number }[];
+  } | null;
 }
 
 /** The cached digest payload (stored as JSON per `week_start`). */
@@ -222,6 +229,22 @@ const tagDriverRule: Rule = ({ tagDriver }) => {
   };
 };
 
+const earlyWarningRule: Rule = ({ earlyWarning }) => {
+  if (!earlyWarning || earlyWarning.status === "ok") return null;
+  const { status, breachCount, drivers } = earlyWarning;
+  const list = drivers
+    .map((d) => `${d.label} (z=${d.z >= 0 ? "+" : ""}${r1(d.z)})`)
+    .join(", ");
+  return {
+    id: "early-warning",
+    severity: status === "alert" ? "alert" : "watch",
+    title: `Early-warning: ${breachCount} body-stress signal${
+      breachCount === 1 ? "" : "s"
+    } off baseline`,
+    detail: `${list}. Ease load and watch for illness; recheck after a good night's sleep.`,
+  };
+};
+
 const anomaliesRule: Rule = ({ anomalies }) => {
   if (anomalies.length === 0) return null;
   const list = anomalies
@@ -237,6 +260,7 @@ const anomaliesRule: Rule = ({ anomalies }) => {
 
 // Fixed order → deterministic card stack.
 const RULES: Rule[] = [
+  earlyWarningRule,
   recoveryTrend,
   sleepDebtTrend,
   acwrStatusRule,
