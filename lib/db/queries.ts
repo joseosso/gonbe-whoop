@@ -4,6 +4,7 @@ import { addDays, parseISO, subDays } from "date-fns";
 import { toLocalDay } from "@/lib/analytics/dates";
 import type {
   DayRange,
+  DaySeries,
   DayTagRow,
   EventRow,
   RecoveryDay,
@@ -288,4 +289,27 @@ export async function getEvents(range: DayRange): Promise<EventRow[]> {
     )
     .orderBy(asc(events.startDay));
   return rows;
+}
+
+/**
+ * Full-history daily recovery score (bucketed by the owning cycle's local day),
+ * for the calendar heatmap. Unbounded by range — the heatmap shows everything.
+ */
+export async function getRecoveryDays(): Promise<DaySeries> {
+  const rows = await db
+    .select({
+      startTime: cycles.startTime,
+      tzOffset: cycles.tzOffset,
+      recoveryScore: recoveries.recoveryScore,
+    })
+    .from(recoveries)
+    .innerJoin(cycles, eq(recoveries.cycleId, cycles.id))
+    .orderBy(asc(cycles.startTime));
+
+  return byDay(
+    rows.map((r) => ({
+      day: toLocalDay(r.startTime, r.tzOffset),
+      value: r.recoveryScore,
+    })),
+  );
 }
