@@ -27,10 +27,12 @@ const STATUS_META: Record<
   },
 };
 
-// Geometry: a regular pentagon (one vertex per signal) in a square viewBox.
-const CX = 130;
+// Geometry: a regular pentagon (one vertex per signal). The viewBox is wide so
+// the left/right axis labels ("Respiratory rate", "Resting HR") have room and
+// aren't clipped; the pentagon stays centred at CX.
+const CX = 175;
 const CY = 120;
-const R = 78;
+const R = 76;
 // z deviations are mapped onto [0, MAX_Z]; the threshold ring sits at 1.5.
 const MAX_Z = 3;
 const THRESHOLD_Z = 1.5;
@@ -82,8 +84,8 @@ export function StrainRadar({ result }: { result: RadarResult }) {
   return (
     <div className="flex flex-col items-center gap-3">
       <svg
-        viewBox="0 0 260 220"
-        className="w-full max-w-sm"
+        viewBox="0 0 350 220"
+        className="w-full max-w-md"
         role="img"
         aria-label={`Early-warning radar: ${meta.label}, ${breachCount} of ${n} signals off baseline`}
       >
