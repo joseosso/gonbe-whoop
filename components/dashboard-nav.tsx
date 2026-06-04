@@ -12,6 +12,7 @@ const ITEMS = [
   { href: "/strain", label: "Strain" },
   { href: "/patterns", label: "Patterns" },
   { href: "/compare", label: "Compare" },
+  { href: "/insights", label: "Insights" },
   { href: "/tags", label: "Tags" },
   { href: "/digest", label: "Digest" },
 ] as const;

@@ -36,7 +36,12 @@ const dayToUtc = (day: Day): Date => new Date(`${day}T00:00:00.000Z`);
 
 /** The calendar day after `day` (DST-immune: steps a fixed 24h at midnight UTC). */
 export function nextDay(day: Day): Day {
-  return new Date(dayToUtc(day).getTime() + MS_PER_DAY)
+  return shiftDay(day, 1);
+}
+
+/** The calendar day `n` days from `day` (DST-immune; `n` may be negative). */
+export function shiftDay(day: Day, n: number): Day {
+  return new Date(dayToUtc(day).getTime() + n * MS_PER_DAY)
     .toISOString()
     .slice(0, 10);
 }
