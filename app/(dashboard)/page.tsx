@@ -1,5 +1,9 @@
 import { Activity, CheckCircle2, Database, Moon, Zap } from "lucide-react";
 
+import {
+  MetricCard,
+  type MetricCardProps,
+} from "@/components/charts/metric-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,12 +14,39 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { SyncButton } from "@/components/sync-button";
+import { densify } from "@/lib/analytics/dates";
+import { summarizeMetric } from "@/lib/analytics/overview";
+import type { DaySeries } from "@/lib/analytics/types";
 import { formatRangeLabel, parseRange } from "@/lib/date-range";
-import { getDataSummary, type DataSummary } from "@/lib/db/queries";
+import {
+  getDataSummary,
+  getRecoverySeries,
+  getSleepSeries,
+  getStrainSeries,
+  type DataSummary,
+} from "@/lib/db/queries";
 import { isConnected } from "@/lib/whoop/oauth";
 
 // Reads live DB state on every request — never prerender.
 export const dynamic = "force-dynamic";
+
+type Metric = Pick<
+  MetricCardProps,
+  "label" | "unit" | "precision" | "series" | "summary"
+>;
+
+const metric = (
+  label: string,
+  unit: string,
+  precision: number,
+  series: DaySeries,
+): Metric => ({
+  label,
+  unit,
+  precision,
+  series,
+  summary: summarizeMetric(series),
+});
 
 export default async function OverviewPage({
   searchParams,
@@ -26,10 +57,49 @@ export default async function OverviewPage({
 
   let connected = false;
   let summary: DataSummary | null = null;
+  let metrics: Metric[] = [];
   let setupError: string | null = null;
 
   try {
-    [connected, summary] = await Promise.all([isConnected(), getDataSummary()]);
+    const [conn, sum, recovery, strain, sleep] = await Promise.all([
+      isConnected(),
+      getDataSummary(),
+      getRecoverySeries(range),
+      getStrainSeries(range),
+      getSleepSeries(range),
+    ]);
+    connected = conn;
+    summary = sum;
+
+    metrics = [
+      metric(
+        "Recovery",
+        "%",
+        0,
+        densify(
+          recovery.map((r) => ({ day: r.day, value: r.recoveryScore })),
+          range,
+        ),
+      ),
+      metric(
+        "Day Strain",
+        "",
+        1,
+        densify(
+          strain.map((r) => ({ day: r.day, value: r.strain })),
+          range,
+        ),
+      ),
+      metric(
+        "Sleep Performance",
+        "%",
+        0,
+        densify(
+          sleep.map((r) => ({ day: r.day, value: r.performancePct })),
+          range,
+        ),
+      ),
+    ];
   } catch (e) {
     setupError =
       e instanceof Error ? e.message : "Could not reach the database.";
@@ -40,7 +110,7 @@ export default async function OverviewPage({
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Showing {formatRangeLabel(range)}.
+          Latest vs 30-day baseline · {formatRangeLabel(range)}.
         </p>
       </header>
 
@@ -48,6 +118,11 @@ export default async function OverviewPage({
         <SetupCard error={setupError} />
       ) : (
         <div className="flex flex-col gap-6">
+          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {metrics.map((m) => (
+              <MetricCard key={m.label} {...m} />
+            ))}
+          </section>
           <ConnectionCard connected={connected} />
           {summary && <DataSummaryGrid summary={summary} />}
         </div>
