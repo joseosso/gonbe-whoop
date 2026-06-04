@@ -8,9 +8,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { buildTrend, type TrendPoint } from "@/lib/analytics/trend";
-import type { DaySeries } from "@/lib/analytics/types";
-import { formatRangeLabel, parseRange } from "@/lib/date-range";
-import { getRecoveryDays, getRecoverySeries } from "@/lib/db/queries";
+import type { DaySeries, EventRow } from "@/lib/analytics/types";
+import {
+  clampEventsToRange,
+  formatRangeLabel,
+  parseRange,
+} from "@/lib/date-range";
+import {
+  getEvents,
+  getRecoveryDays,
+  getRecoverySeries,
+} from "@/lib/db/queries";
 
 // Reads live DB state on every request — never prerender.
 export const dynamic = "force-dynamic";
@@ -25,14 +33,17 @@ export default async function RecoveryPage({
   let calendar: DaySeries = [];
   let hrv: TrendPoint[] = [];
   let rhr: TrendPoint[] = [];
+  let events: EventRow[] = [];
   let error: string | null = null;
 
   try {
-    const [days, recovery] = await Promise.all([
+    const [days, recovery, eventRows] = await Promise.all([
       getRecoveryDays(),
       getRecoverySeries(range),
+      getEvents(range),
     ]);
     calendar = days;
+    events = clampEventsToRange(eventRows, range);
     hrv = buildTrend(
       recovery.map((r) => ({ day: r.day, value: r.hrvRmssdMilli })),
       range,
@@ -80,6 +91,7 @@ export default async function RecoveryPage({
             data={hrv}
             unit=" ms"
             precision={1}
+            events={events}
           />
           <TrendCard
             title="Resting heart rate"
@@ -87,6 +99,7 @@ export default async function RecoveryPage({
             data={rhr}
             unit=" bpm"
             precision={0}
+            events={events}
           />
         </div>
       )}
@@ -100,12 +113,14 @@ function TrendCard({
   data,
   unit,
   precision,
+  events,
 }: {
   title: string;
   description: string;
   data: TrendPoint[];
   unit: string;
   precision: number;
+  events: EventRow[];
 }) {
   return (
     <Card>
@@ -114,7 +129,12 @@ function TrendCard({
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
-        <TrendChart data={data} unit={unit} precision={precision} />
+        <TrendChart
+          data={data}
+          unit={unit}
+          precision={precision}
+          events={events}
+        />
       </CardContent>
     </Card>
   );

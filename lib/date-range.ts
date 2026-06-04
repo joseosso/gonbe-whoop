@@ -1,6 +1,6 @@
 import { format, isValid, parseISO, subDays } from "date-fns";
 
-import type { Day, DayRange } from "@/lib/analytics/types";
+import type { Day, DayRange, EventRow } from "@/lib/analytics/types";
 
 /** Default look-back window when the URL carries no (valid) range. */
 export const DEFAULT_RANGE_DAYS = 90;
@@ -33,6 +33,26 @@ export function parseRange(params: { from?: string; to?: string }): DayRange {
   let to = isValidDay(params.to) ? params.to : fallback.to;
   if (from > to) [from, to] = [to, from];
   return { from, to };
+}
+
+/**
+ * Clamp each event's span to `range` so its days line up with a chart's day
+ * axis. Lexicographic compare works for `YYYY-MM-DD`. (`getEvents` already
+ * returns only events overlapping the range.)
+ */
+export function clampEventsToRange(
+  events: EventRow[],
+  range: DayRange,
+): EventRow[] {
+  return events.map((e) => ({
+    ...e,
+    startDay: e.startDay < range.from ? range.from : e.startDay,
+    endDay: e.endDay
+      ? e.endDay > range.to
+        ? range.to
+        : e.endDay
+      : null,
+  }));
 }
 
 /** Human label for a range, e.g. `"Jun 1 – Aug 30, 2024"`. */
