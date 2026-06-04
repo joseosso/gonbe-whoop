@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { toLocalDay } from "./dates";
+import {
+  densify,
+  eachDay,
+  toLocalDay,
+  weekdayIndex,
+  weekdayName,
+} from "./dates";
 
 describe("toLocalDay", () => {
   it("buckets by UTC when the offset is +00:00", () => {
@@ -45,5 +51,50 @@ describe("toLocalDay", () => {
     expect(toLocalDay(new Date("2024-06-15T23:00:00Z"), "+05:30")).toBe(
       "2024-06-16",
     );
+  });
+});
+
+describe("eachDay", () => {
+  it("enumerates an inclusive range across a leap day", () => {
+    expect(eachDay({ from: "2024-02-27", to: "2024-03-02" })).toEqual([
+      "2024-02-27",
+      "2024-02-28",
+      "2024-02-29", // 2024 is a leap year
+      "2024-03-01",
+      "2024-03-02",
+    ]);
+  });
+
+  it("returns a single day when from === to", () => {
+    expect(eachDay({ from: "2024-06-15", to: "2024-06-15" })).toEqual([
+      "2024-06-15",
+    ]);
+  });
+});
+
+describe("densify", () => {
+  it("fills missing days with null and preserves zeros", () => {
+    expect(
+      densify(
+        [
+          { day: "2024-03-01", value: 0 },
+          { day: "2024-03-03", value: 7 },
+        ],
+        { from: "2024-03-01", to: "2024-03-03" },
+      ),
+    ).toEqual([
+      { day: "2024-03-01", value: 0 },
+      { day: "2024-03-02", value: null },
+      { day: "2024-03-03", value: 7 },
+    ]);
+  });
+});
+
+describe("weekday helpers", () => {
+  it("maps days to weekday index and label", () => {
+    expect(weekdayIndex("2024-06-16")).toBe(0); // Sunday
+    expect(weekdayName("2024-06-16")).toBe("Sun");
+    expect(weekdayIndex("2024-06-17")).toBe(1); // Monday
+    expect(weekdayName("2024-06-17")).toBe("Mon");
   });
 });
