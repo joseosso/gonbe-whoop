@@ -4,9 +4,9 @@ import {
   bedtimeWindows,
   buildTimingNights,
   recommendBedtime,
+  type BedtimeNightInput,
   type TimingNight,
 } from "./sleep-timing";
-import type { RecoveryDay, SleepDay } from "./types";
 
 /** Clock "HH:MM" → minute-of-day. */
 const at = (hh: number, mm = 0) => hh * 60 + mm;
@@ -104,29 +104,26 @@ describe("recommendBedtime", () => {
 });
 
 describe("buildTimingNights", () => {
-  const sleep = (
-    day: string,
+  // Nights arrive already paired with their recovery (via sleep_id) upstream, so
+  // the unit only reduces them — bed-time clock-minute, recovery, stage shares.
+  const input = (
     bedHour: number,
     stages: { light: number; sws: number; rem: number } | null,
-  ): SleepDay =>
-    ({
-      day,
-      // 2024-03-02 bedHour:00 UTC; tzOffset +00:00 keeps the clock-minute simple.
-      startTime: new Date(`2024-03-02T${String(bedHour).padStart(2, "0")}:00:00Z`),
-      tzOffset: "+00:00",
-      lightMilli: stages?.light ?? null,
-      swsMilli: stages?.sws ?? null,
-      remMilli: stages?.rem ?? null,
-    }) as SleepDay;
+    recoveryScore: number | null,
+  ): BedtimeNightInput => ({
+    // 2024-03-02 bedHour:00 UTC; tzOffset +00:00 keeps the clock-minute simple.
+    startTime: new Date(`2024-03-02T${String(bedHour).padStart(2, "0")}:00:00Z`),
+    tzOffset: "+00:00",
+    lightMilli: stages?.light ?? null,
+    swsMilli: stages?.sws ?? null,
+    remMilli: stages?.rem ?? null,
+    recoveryScore,
+  });
 
-  const recovery = (day: string, score: number | null): RecoveryDay =>
-    ({ day, recoveryScore: score }) as RecoveryDay;
-
-  it("joins recovery on the wake day and computes stage shares", () => {
-    const nights = buildTimingNights(
-      [sleep("2024-03-03", 23, { light: 50, sws: 25, rem: 25 })],
-      [recovery("2024-03-03", 66)],
-    );
+  it("carries the paired recovery and computes stage shares", () => {
+    const nights = buildTimingNights([
+      input(23, { light: 50, sws: 25, rem: 25 }, 66),
+    ]);
     expect(nights[0].bedMinute).toBe(23 * 60);
     expect(nights[0].recovery).toBe(66);
     expect(nights[0].deepShare).toBeCloseTo(0.25); // 25 / (50+25+25)
@@ -134,10 +131,7 @@ describe("buildTimingNights", () => {
   });
 
   it("null-guards a missing recovery and absent stages", () => {
-    const nights = buildTimingNights(
-      [sleep("2024-03-03", 22, null)],
-      [], // no recovery for the wake day
-    );
+    const nights = buildTimingNights([input(22, null, null)]);
     expect(nights[0].recovery).toBeNull();
     expect(nights[0].deepShare).toBeNull();
     expect(nights[0].remShare).toBeNull();
