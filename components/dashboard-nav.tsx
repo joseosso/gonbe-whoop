@@ -11,6 +11,7 @@ const ITEMS = [
   { href: "/sleep", label: "Sleep" },
   { href: "/strain", label: "Strain" },
   { href: "/patterns", label: "Patterns" },
+  { href: "/compare", label: "Compare" },
 ] as const;
 
 /** Dashboard section tabs. Carries the active `?from=&to=` range across pages. */
