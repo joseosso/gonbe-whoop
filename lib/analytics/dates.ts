@@ -17,6 +17,20 @@ export function toLocalDay(instant: Date, tzOffset: string | null): Day {
   return formatInTimeZone(instant, tzOffset ?? UTC_OFFSET, "yyyy-MM-dd");
 }
 
+/**
+ * Local clock minute-of-day (0–1439) for an instant, using the record's fixed
+ * `tzOffset`. Used by the sleep-regularity formula to compare bed/wake times.
+ */
+export function localClockMinutes(
+  instant: Date,
+  tzOffset: string | null,
+): number {
+  const [h, m] = formatInTimeZone(instant, tzOffset ?? UTC_OFFSET, "HH:mm")
+    .split(":")
+    .map(Number);
+  return h * 60 + m;
+}
+
 /** Anchor a `YYYY-MM-DD` day at midnight UTC, so day math is DST-immune. */
 const dayToUtc = (day: Day): Date => new Date(`${day}T00:00:00.000Z`);
 
