@@ -1,3 +1,4 @@
+import { BedtimeOptimizer } from "@/components/charts/bedtime-optimizer";
 import {
   SleepDebtChart,
   SleepStagesChart,
@@ -16,11 +17,12 @@ import { format, parseISO, subDays } from "date-fns";
 
 import { eachDay, localClockMinutes } from "@/lib/analytics/dates";
 import { regularityIndex, type Regularity } from "@/lib/analytics/regularity";
+import { sleepDebt, sleepNights, SLEEP_DEBT_WINDOW } from "@/lib/analytics/sleep-debt";
 import {
-  sleepDebt,
-  SLEEP_DEBT_WINDOW,
-  type SleepNight,
-} from "@/lib/analytics/sleep-debt";
+  buildTimingNights,
+  recommendBedtime,
+  type BedtimeOptimizer as BedtimeOptimizerResult,
+} from "@/lib/analytics/sleep-timing";
 import { buildTrend, type TrendPoint } from "@/lib/analytics/trend";
 import type { DayRange, EventRow } from "@/lib/analytics/types";
 import {
@@ -28,19 +30,13 @@ import {
   formatRangeLabel,
   parseRange,
 } from "@/lib/date-range";
-import { getEvents, getSleepSeries } from "@/lib/db/queries";
+import { getEvents, getRecoverySeries, getSleepSeries } from "@/lib/db/queries";
 
 // Reads live DB state on every request — never prerender.
 export const dynamic = "force-dynamic";
 
 const MS_PER_HOUR = 3_600_000;
 const toHours = (milli: number | null) => (milli === null ? null : milli / MS_PER_HOUR);
-
-/** Sum of components, or null when every component is missing. */
-const sumOrNull = (parts: (number | null)[]) =>
-  parts.every((p) => p === null)
-    ? null
-    : parts.reduce<number>((acc, p) => acc + (p ?? 0), 0);
 
 export default async function SleepPage({
   searchParams,
@@ -54,6 +50,7 @@ export default async function SleepPage({
   let performance: TrendPoint[] = [];
   let efficiency: TrendPoint[] = [];
   let regularity: Regularity = { index: null, bedR: null, wakeR: null, n: 0 };
+  let bedtime: BedtimeOptimizerResult | null = null;
   let events: EventRow[] = [];
   let error: string | null = null;
 
@@ -68,9 +65,10 @@ export default async function SleepPage({
   };
 
   try {
-    const [sleeps, debtSleeps, eventRows] = await Promise.all([
+    const [sleeps, debtSleeps, recovery, eventRows] = await Promise.all([
       getSleepSeries(range),
       getSleepSeries(debtRange),
+      getRecoverySeries(range),
       getEvents(range),
     ]);
     events = clampEventsToRange(eventRows, range);
@@ -88,24 +86,7 @@ export default async function SleepPage({
       };
     });
 
-    const debtByDay = new Map(debtSleeps.map((s) => [s.day, s]));
-    const nights: SleepNight[] = eachDay(debtRange).map((day) => {
-      const s = debtByDay.get(day);
-      return {
-        day,
-        needMilli: s
-          ? sumOrNull([
-              s.needBaselineMilli,
-              s.needFromDebtMilli,
-              s.needFromStrainMilli,
-            ])
-          : null,
-        actualMilli: s
-          ? sumOrNull([s.lightMilli, s.swsMilli, s.remMilli])
-          : null,
-      };
-    });
-    debt = sleepDebt(nights)
+    debt = sleepDebt(sleepNights(debtSleeps, debtRange))
       .filter((p) => p.day >= range.from) // drop the pre-range warm-up days
       .map((p) => ({
         day: p.day,
@@ -127,6 +108,10 @@ export default async function SleepPage({
         wakeMinute: localClockMinutes(s.endTime, s.tzOffset),
       })),
     );
+
+    // Ideal-bedtime optimizer: bucket nights by bedtime, rank by the recovery
+    // each window produced (joined on the wake day).
+    bedtime = recommendBedtime(buildTimingNights(sleeps, recovery));
   } catch (e) {
     error = e instanceof Error ? e.message : "Could not reach the database.";
   }
@@ -195,6 +180,21 @@ export default async function SleepPage({
             </Card>
             <RegularityCard regularity={regularity} />
           </div>
+
+          {bedtime && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Ideal bedtime</CardTitle>
+                <CardDescription>
+                  Which bed-time window precedes your best recovery, with the
+                  deep/REM share and sample size behind each.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BedtimeOptimizer optimizer={bedtime} />
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>
