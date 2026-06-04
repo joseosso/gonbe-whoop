@@ -2,6 +2,7 @@ import { and, asc, between, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { addDays, parseISO, subDays } from "date-fns";
 
 import { toLocalDay } from "@/lib/analytics/dates";
+import type { BedtimeNightInput } from "@/lib/analytics/sleep-timing";
 import type {
   DayRange,
   DaySeries,
@@ -199,6 +200,50 @@ export async function getSleepSeries(range: DayRange): Promise<SleepDay[]> {
       }))
       .filter((r) => inRange(r.day, range)),
   );
+}
+
+/**
+ * Main-sleep nights in range, each **paired with the recovery it produced** via
+ * WHOOP's stored `sleep_id` link (not a recomputed-local-day join), so the
+ * pairing stays correct across DST / timezone changes. Bucketed to the wake
+ * (`end_time`) local day for range membership; naps excluded. Feeds the
+ * bedtime optimizer (`buildTimingNights`).
+ */
+export async function getBedtimeNights(
+  range: DayRange,
+): Promise<BedtimeNightInput[]> {
+  const { lo, hi } = utcWindow(range);
+  const rows = await db
+    .select({
+      endTime: sleeps.endTime,
+      startTime: sleeps.startTime,
+      tzOffset: sleeps.tzOffset,
+      lightMilli: sleeps.lightMilli,
+      swsMilli: sleeps.swsMilli,
+      remMilli: sleeps.remMilli,
+      recoveryScore: recoveries.recoveryScore,
+    })
+    .from(sleeps)
+    .leftJoin(recoveries, eq(recoveries.sleepId, sleeps.id))
+    .where(
+      and(
+        eq(sleeps.isNap, false),
+        gte(sleeps.endTime, lo),
+        lte(sleeps.endTime, hi),
+      ),
+    )
+    .orderBy(asc(sleeps.endTime));
+
+  return rows
+    .filter((r) => inRange(toLocalDay(r.endTime, r.tzOffset), range))
+    .map((r) => ({
+      startTime: r.startTime,
+      tzOffset: r.tzOffset,
+      lightMilli: r.lightMilli,
+      swsMilli: r.swsMilli,
+      remMilli: r.remMilli,
+      recoveryScore: r.recoveryScore,
+    }));
 }
 
 /**

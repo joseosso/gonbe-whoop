@@ -1,6 +1,5 @@
 import { meanStdev, type Stats } from "./baseline";
 import { localClockMinutes } from "./dates";
-import type { RecoveryDay, SleepDay } from "./types";
 
 /**
  * Ideal-bedtime / sleep-timing optimizer (Plan §4.4). Buckets nights by bed-time
@@ -136,24 +135,38 @@ const share = (part: number | null, asleep: number | null): number | null =>
   part !== null && asleep !== null && asleep > 0 ? part / asleep : null;
 
 /**
- * Reduce sleep nights + recovery into `TimingNight`s: bed-time clock-minute, the
- * recovery the night produced (joined on the wake day, which both the sleep and
- * recovery readers bucket to), and deep/REM share of asleep time. Naps are
- * already excluded upstream by `getSleepSeries`.
+ * One sleep night already paired with the recovery it produced. The pairing is
+ * done upstream via WHOOP's stored `sleep_id` FK (see `getBedtimeNights`), **not**
+ * by recomputed local day — so a night and its recovery stay matched across DST
+ * and timezone changes, where the sleep's wake-day offset and the recovery
+ * cycle's offset can otherwise diverge.
  */
-export function buildTimingNights(
-  sleep: SleepDay[],
-  recovery: RecoveryDay[],
-): TimingNight[] {
-  const recByDay = new Map(recovery.map((r) => [r.day, r.recoveryScore]));
-  return sleep.map((s) => {
+export interface BedtimeNightInput {
+  /** Sleep onset instant. */
+  startTime: Date;
+  /** The sleep record's fixed UTC offset (for the local bed-time clock-minute). */
+  tzOffset: string | null;
+  lightMilli: number | null;
+  swsMilli: number | null;
+  remMilli: number | null;
+  /** Recovery score this night produced (via `sleep_id`), or `null`. */
+  recoveryScore: number | null;
+}
+
+/**
+ * Reduce FK-paired sleep nights into `TimingNight`s: bed-time clock-minute, the
+ * recovery the night produced, and deep/REM share of asleep time. Naps are
+ * already excluded upstream by `getBedtimeNights`.
+ */
+export function buildTimingNights(nights: BedtimeNightInput[]): TimingNight[] {
+  return nights.map((s) => {
     const asleep =
       s.lightMilli === null && s.swsMilli === null && s.remMilli === null
         ? null
         : (s.lightMilli ?? 0) + (s.swsMilli ?? 0) + (s.remMilli ?? 0);
     return {
       bedMinute: localClockMinutes(s.startTime, s.tzOffset),
-      recovery: recByDay.get(s.day) ?? null,
+      recovery: s.recoveryScore,
       deepShare: share(s.swsMilli, asleep),
       remShare: share(s.remMilli, asleep),
     };

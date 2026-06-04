@@ -30,7 +30,7 @@ import {
   formatRangeLabel,
   parseRange,
 } from "@/lib/date-range";
-import { getEvents, getRecoverySeries, getSleepSeries } from "@/lib/db/queries";
+import { getBedtimeNights, getEvents, getSleepSeries } from "@/lib/db/queries";
 
 // Reads live DB state on every request — never prerender.
 export const dynamic = "force-dynamic";
@@ -65,10 +65,10 @@ export default async function SleepPage({
   };
 
   try {
-    const [sleeps, debtSleeps, recovery, eventRows] = await Promise.all([
+    const [sleeps, debtSleeps, bedtimeNights, eventRows] = await Promise.all([
       getSleepSeries(range),
       getSleepSeries(debtRange),
-      getRecoverySeries(range),
+      getBedtimeNights(range),
       getEvents(range),
     ]);
     events = clampEventsToRange(eventRows, range);
@@ -110,8 +110,8 @@ export default async function SleepPage({
     );
 
     // Ideal-bedtime optimizer: bucket nights by bedtime, rank by the recovery
-    // each window produced (joined on the wake day).
-    bedtime = recommendBedtime(buildTimingNights(sleeps, recovery));
+    // each window produced (paired via WHOOP's sleep_id, timezone-proof).
+    bedtime = recommendBedtime(buildTimingNights(bedtimeNights));
   } catch (e) {
     error = e instanceof Error ? e.message : "Could not reach the database.";
   }
