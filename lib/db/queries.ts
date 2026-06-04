@@ -313,3 +313,48 @@ export async function getRecoveryDays(): Promise<DaySeries> {
     })),
   );
 }
+
+/**
+ * Full-history daily cycle strain (bucketed by the cycle's local day). Unbounded
+ * by range — period comparisons (MoM/YoY) need months outside any one window.
+ */
+export async function getStrainDays(): Promise<DaySeries> {
+  const rows = await db
+    .select({
+      startTime: cycles.startTime,
+      tzOffset: cycles.tzOffset,
+      strain: cycles.strain,
+    })
+    .from(cycles)
+    .orderBy(asc(cycles.startTime));
+
+  return byDay(
+    rows.map((r) => ({
+      day: toLocalDay(r.startTime, r.tzOffset),
+      value: r.strain,
+    })),
+  );
+}
+
+/**
+ * Full-history daily sleep performance (bucketed by **wake** local day, naps
+ * excluded). Unbounded by range — for MoM/YoY period comparisons.
+ */
+export async function getSleepPerformanceDays(): Promise<DaySeries> {
+  const rows = await db
+    .select({
+      endTime: sleeps.endTime,
+      tzOffset: sleeps.tzOffset,
+      performancePct: sleeps.performancePct,
+    })
+    .from(sleeps)
+    .where(eq(sleeps.isNap, false))
+    .orderBy(asc(sleeps.endTime));
+
+  return byDay(
+    rows.map((r) => ({
+      day: toLocalDay(r.endTime, r.tzOffset),
+      value: r.performancePct,
+    })),
+  );
+}
