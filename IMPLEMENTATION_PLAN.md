@@ -227,12 +227,95 @@ Only when you decide to move off local. Schema already carries the seam for this
 
 ---
 
+## Phase 4 — Decision-support & predictive insights
+
+Goal: move from *describing* the data (Phases 1–2) to *prescribing* action and
+*forecasting* outcomes — the "what should I do next?" layer. Inspired by Oura's
+readiness/illness/bedtime guidance, but driven entirely by the user's own
+baselines. All analytics stay pure and unit-tested; no new external data is
+required (these surface columns already synced but under-used: `skin_temp_c`,
+`spo2`, `respiratory_rate`). Ordered by value-per-effort.
+
+### 4.1 Safe-strain budget (forward ACWR what-if)
+- **Files:** `lib/analytics/acwr.ts` (extend, + tests),
+  `components/charts/strain-budget.tsx`, surfaced on the Strain page.
+- **Approach:** Invert the ACWR formula. Given the prior acute/chronic loads,
+  solve for the maximum day-strain that keeps end-of-day ACWR ≤ a target
+  (default 1.3, the top of the sweet spot): with `acuteMean=(S+a)/(na+1)` and
+  `chronicMean=(S+b)/(nb+1)`, `S_max = (T·b − k·a)/(k − T)` where `k=(nb+1)/(na+1)`.
+  Add `projectAcwr(strain, prior)` so a client slider shows the projected ratio
+  + R/A/G status live as you dial in a planned workout. Clamp display against the
+  WHOOP strain ceiling (21) → "full headroom" when the bound exceeds it.
+- **Exit:** Pure `priorLoads`/`projectAcwr`/`strainBudget` unit-tested (steady
+  state, thin history → null, already-elevated → 0, boundary at target);
+  interactive budget card renders on Strain with a live projected ACWR.
+
+### 4.2 Illness & strain early-warning radar (multi-signal fusion)
+- **Files:** `lib/analytics/strain-radar.ts` (+ tests),
+  `components/charts/strain-radar.tsx`, an Overview card + a Digest rule.
+- **Approach:** Fuse per-night z-scores of the body-stress signals — skin temp ↑,
+  resting HR ↑, HRV ↓, respiratory rate ↑, SpO2 ↓ — against each metric's own
+  trailing baseline (reuse `rollingBaseline` + `zScore`). Flag a day when
+  ≥ 2 signals breach `|z| ≥ 1.5` in the adverse direction; severity scales with
+  the count. Surface the contributing signals so it's explainable, not a black
+  box. Feed an `alert`/`watch` card into the weekly digest (§2.5).
+- **Exit:** Radar function unit-tested (single-signal = no flag, ≥2 = flag,
+  direction-aware, null-guarded); Overview shows current status with the driving
+  signals; digest gains an early-warning rule.
+
+### 4.3 Tomorrow's recovery forecast
+- **Files:** `lib/analytics/forecast.ts` (+ tests),
+  `components/charts/recovery-forecast.tsx`, Overview card.
+- **Approach:** Predict tomorrow's recovery band (green/amber/red) from inputs we
+  already compute: today's strain, current sleep debt, ACWR, and the HRV EWMA
+  slope. Start deterministic (a transparent weighted score → band), not a trained
+  model, so it stays pure and honest. **Backtest** over history and report mean
+  absolute error / band-hit-rate in the UI so the forecast isn't over-claimed
+  (SPEC §5 statistical-honesty guidance).
+- **Exit:** Forecast + backtest functions unit-tested; Overview shows a predicted
+  band with its historical accuracy; degrades gracefully on thin history.
+
+### 4.4 Ideal bedtime / sleep-timing optimizer
+- **Files:** `lib/analytics/sleep-timing.ts` (+ tests),
+  `components/charts/bedtime-optimizer.tsx`, Sleep-page card.
+- **Approach:** Bucket nights by bed-time clock-minute window (reuse
+  `localClockMinutes`), then compute the mean **next-day** recovery and deep/REM
+  share per window (driver-style continuous bins). Recommend the window that
+  precedes the best outcomes, with `n` and spread per window so small samples are
+  flagged. Respect the existing nap exclusion.
+- **Exit:** Timing analysis unit-tested (binning, next-day join, small-n guard);
+  Sleep page shows a recommended bedtime window with the evidence behind it.
+
+### 4.5 Auto driver discovery (lagged-correlation engine)
+- **Files:** `lib/analytics/correlate.ts` (+ tests),
+  `app/(dashboard)/insights/page.tsx`, `components/charts/correlation-matrix.tsx`.
+- **Approach:** Generalize the tag-driver idea (§2.3) to **every metric pair with
+  a configurable lag** — e.g. late bedtime → next-day deep sleep, high strain →
+  next-day RHR, respiratory rate → recovery, plus tags as binary series. Rank by
+  effect size (Pearson/Spearman) with an `n` and significance/low-confidence
+  guard per the spec's statistical-honesty rule; surface only the strongest,
+  explainable relationships. A new Insights page ranks "what actually moves your
+  recovery."
+- **Exit:** Correlation engine unit-tested (lag alignment, monotonic/known
+  fixtures, n-guard, NaN-safe); Insights page ranks drivers with confidence
+  guarding; no over-claiming on small n.
+
+**Phase 4 exit criteria:** The app prescribes a safe daily strain ceiling, warns
+of illness/overtraining from fused physiological signals, forecasts tomorrow's
+recovery with an honest accuracy figure, recommends a personal bedtime window,
+and auto-surfaces the strongest lagged drivers of recovery — all from personal
+baselines, all unit-tested.
+
+---
+
 ## Suggested build order
 
 1. **C1–C4** (test harness, types, query layer, date-fns) — unblocks everything.
 2. **Phase 1** 1.1 → 1.8 — immediate visual payoff.
 3. **Phase 2** 2.1 → 2.5 — the differentiated insight value.
-4. **Phase 3** — only when deploying.
+4. **Phase 4** 4.1 → 4.5 — decision-support & predictive insights (builds on the
+   Phase 1–2 analytics; independent of the Phase 3 deploy work).
+5. **Phase 3** — only when deploying.
 
 ## Conventions reminder
 - No `any`; validate external data with zod at the boundary; let Drizzle infer DB
