@@ -1,5 +1,6 @@
 import { AcwrGauge } from "@/components/charts/acwr-gauge";
 import { HrZoneBar, type ZonePoint } from "@/components/charts/hr-zone-bar";
+import { StrainBudget } from "@/components/charts/strain-budget";
 import { StrainRecoveryScatter } from "@/components/charts/strain-recovery-scatter";
 import { TrendChart } from "@/components/charts/trend-chart";
 import {
@@ -9,7 +10,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { acwrSeries, currentAcwr, type AcwrPoint } from "@/lib/analytics/acwr";
+import {
+  ACWR_BANDS,
+  acwrSeries,
+  currentAcwr,
+  priorLoads,
+  type AcwrPoint,
+  type PriorLoads,
+} from "@/lib/analytics/acwr";
 import { densify, eachDay } from "@/lib/analytics/dates";
 import { summarizeMetric } from "@/lib/analytics/overview";
 import {
@@ -47,6 +55,7 @@ export default async function StrainPage({
   let zones: ZonePoint[] = [];
   let flaggedCount = 0;
   let acwr: AcwrPoint | null = null;
+  let strainPrior: PriorLoads | null = null;
   let hrvZ: number | null = null;
   let events: EventRow[] = [];
   let error: string | null = null;
@@ -68,14 +77,14 @@ export default async function StrainPage({
     // ACWR (overtraining watch): trailing 7d vs 28d mean strain over a
     // densified series so the windows are calendar-aligned. The latest point
     // has a full chronic window whenever the range spans ≥ 28 days.
-    acwr = currentAcwr(
-      acwrSeries(
-        densify(
-          strain.map((s) => ({ day: s.day, value: s.strain })),
-          range,
-        ),
-      ),
+    const strainDense = densify(
+      strain.map((s) => ({ day: s.day, value: s.strain })),
+      range,
     );
+    acwr = currentAcwr(acwrSeries(strainDense));
+    // Prior loads for the safe-strain budget (forward what-if), anchored on the
+    // last day in range (today, on the default range).
+    strainPrior = priorLoads(strainDense);
     // HRV deviation from its own 30-day baseline, as a supporting signal.
     hrvZ = summarizeMetric(
       densify(
@@ -126,7 +135,7 @@ export default async function StrainPage({
         <p className="text-destructive text-sm">{error}</p>
       ) : (
         <>
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle>Overtraining watch</CardTitle>
@@ -138,18 +147,39 @@ export default async function StrainPage({
                 <AcwrGauge point={acwr} hrvZ={hrvZ} />
               </CardContent>
             </Card>
-            <Card className="lg:col-span-2">
+            <Card>
               <CardHeader>
-                <CardTitle>Daily strain</CardTitle>
+                <CardTitle>Strain budget</CardTitle>
                 <CardDescription>
-                  Cycle strain with EWMA and 30-day baseline band.
+                  How much today can absorb before ACWR leaves the sweet spot.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <TrendChart data={strainTrend} precision={1} events={events} />
+                {strainPrior ? (
+                  <StrainBudget
+                    prior={strainPrior}
+                    targetRatio={ACWR_BANDS.optimalMax}
+                  />
+                ) : (
+                  <p className="text-muted-foreground py-12 text-center text-sm">
+                    No strain data in range.
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Daily strain</CardTitle>
+              <CardDescription>
+                Cycle strain with EWMA and 30-day baseline band.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TrendChart data={strainTrend} precision={1} events={events} />
+            </CardContent>
+          </Card>
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>

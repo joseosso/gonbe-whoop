@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { acwrSeries, acwrStatus, currentAcwr } from "./acwr";
+import {
+  acwrSeries,
+  acwrStatus,
+  currentAcwr,
+  priorLoads,
+  projectAcwr,
+  strainBudget,
+  type PriorLoads,
+} from "./acwr";
 import type { DaySeries } from "./types";
 
 const series = (values: (number | null)[]): DaySeries =>
@@ -64,5 +72,71 @@ describe("currentAcwr", () => {
 
   it("returns null when no point has a ratio", () => {
     expect(currentAcwr(acwrSeries(series([null, null])))).toBeNull();
+  });
+});
+
+describe("priorLoads", () => {
+  it("sums the days before today, excluding today, per window", () => {
+    // 30 steady days of 10; today is the 30th. Acute lookback = 6 prior days,
+    // chronic lookback = 27 prior days.
+    const p = priorLoads(series(Array(30).fill(10)));
+    expect(p).toEqual({
+      acuteSum: 60,
+      acuteN: 6,
+      chronicSum: 270,
+      chronicN: 27,
+    });
+  });
+
+  it("skips null days within the lookback", () => {
+    const p = priorLoads(series([10, null, 10, 10]), {
+      acuteWindow: 3,
+      chronicWindow: 4,
+    });
+    // before today = [10, null, 10]; acute lookback (2) = [null, 10].
+    expect(p.acuteSum).toBe(10);
+    expect(p.acuteN).toBe(1);
+  });
+});
+
+describe("projectAcwr", () => {
+  const steady = priorLoads(series(Array(30).fill(10)));
+
+  it("returns 1.0 when today matches the steady load", () => {
+    expect(projectAcwr(10, steady)).toBeCloseTo(1);
+  });
+
+  it("drops below 1 for a rest day and rises with a hard day", () => {
+    expect(projectAcwr(0, steady)!).toBeLessThan(1);
+    expect(projectAcwr(20, steady)!).toBeGreaterThan(1);
+  });
+
+  it("returns null when there is no chronic load", () => {
+    expect(projectAcwr(0, { acuteSum: 0, acuteN: 0, chronicSum: 0, chronicN: 0 })).toBeNull();
+  });
+});
+
+describe("strainBudget", () => {
+  it("solves for the max strain that lands exactly on the target", () => {
+    const steady = priorLoads(series(Array(30).fill(10)));
+    const budget = strainBudget(steady, 1.3);
+    expect(budget).toBeCloseTo(111 / 2.7); // (1.3·270 − 4·60)/(4 − 1.3)
+    // Feeding the budget back through projectAcwr lands on the target.
+    expect(projectAcwr(budget!, steady)).toBeCloseTo(1.3);
+  });
+
+  it("clamps to 0 when prior load already exceeds the target", () => {
+    const hot: PriorLoads = {
+      acuteSum: 120,
+      acuteN: 6,
+      chronicSum: 120,
+      chronicN: 27,
+    };
+    expect(strainBudget(hot, 1.3)).toBe(0);
+  });
+
+  it("returns null when history is too thin to bound a day", () => {
+    // Two days only: k = (1+1)/(1+1) = 1 ≤ target, can't bound.
+    expect(strainBudget(priorLoads(series([10, 10])), 1.3)).toBeNull();
   });
 });
