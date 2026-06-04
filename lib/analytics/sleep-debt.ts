@@ -1,10 +1,37 @@
-import type { Day } from "./types";
+import { eachDay } from "./dates";
+import type { Day, DayRange, SleepDay } from "./types";
 
 /** A night's sleep need vs. what you actually slept (both in millis). */
 export interface SleepNight {
   day: Day;
   needMilli: number | null;
   actualMilli: number | null;
+}
+
+/** Sum of components, or `null` when every component is missing. */
+const sumOrNull = (parts: (number | null)[]): number | null =>
+  parts.every((p) => p === null)
+    ? null
+    : parts.reduce<number>((acc, p) => acc + (p ?? 0), 0);
+
+/**
+ * Densify main-sleep rows into one need/actual night per calendar day in range
+ * (nights with no sleep become `null`/`null`). `need` sums the baseline + debt +
+ * strain components; `actual` sums the light + SWS + REM stages. Shared by the
+ * sleep-debt and forecast pipelines so the night derivation lives in one place.
+ */
+export function sleepNights(sleep: SleepDay[], range: DayRange): SleepNight[] {
+  const byDay = new Map(sleep.map((s) => [s.day, s]));
+  return eachDay(range).map((day) => {
+    const s = byDay.get(day);
+    return {
+      day,
+      needMilli: s
+        ? sumOrNull([s.needBaselineMilli, s.needFromDebtMilli, s.needFromStrainMilli])
+        : null,
+      actualMilli: s ? sumOrNull([s.lightMilli, s.swsMilli, s.remMilli]) : null,
+    };
+  });
 }
 
 /** Trailing sleep-debt point: cumulative deficit over the window. */

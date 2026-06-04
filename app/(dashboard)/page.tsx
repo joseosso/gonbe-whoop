@@ -1,5 +1,6 @@
 import {
   Activity,
+  CalendarClock,
   CheckCircle2,
   Database,
   Moon,
@@ -11,6 +12,7 @@ import {
   MetricCard,
   type MetricCardProps,
 } from "@/components/charts/metric-card";
+import { RecoveryForecast } from "@/components/charts/recovery-forecast";
 import { StrainRadar } from "@/components/charts/strain-radar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,8 +24,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { SyncButton } from "@/components/sync-button";
+import { acwrSeries } from "@/lib/analytics/acwr";
 import { densify } from "@/lib/analytics/dates";
+import {
+  backtestForecast,
+  buildForecast,
+  currentForecast,
+  type BacktestResult,
+  type ForecastPoint,
+} from "@/lib/analytics/forecast";
 import { summarizeMetric } from "@/lib/analytics/overview";
+import { sleepDebt, sleepNights } from "@/lib/analytics/sleep-debt";
 import {
   buildRadar,
   buildRadarSignals,
@@ -72,6 +83,8 @@ export default async function OverviewPage({
   let summary: DataSummary | null = null;
   let metrics: Metric[] = [];
   let radar: RadarResult | null = null;
+  let forecast: ForecastPoint | null = null;
+  let backtest: BacktestResult | null = null;
   let setupError: string | null = null;
 
   try {
@@ -118,6 +131,33 @@ export default async function OverviewPage({
     // Illness & strain early-warning radar: fuse the body-stress signals
     // (skin temp, RHR, HRV, resp rate, SpO2) vs each metric's own baseline.
     radar = buildRadar(buildRadarSignals(recovery, sleep, range));
+
+    // Tomorrow's recovery forecast: a transparent weighted score over drivers we
+    // already compute (today's strain, sleep debt, ACWR, HRV EWMA slope), with a
+    // backtest over the range so the accuracy is honest.
+    const recoveryDense = densify(
+      recovery.map((r) => ({ day: r.day, value: r.recoveryScore })),
+      range,
+    );
+    const strainDense = densify(
+      strain.map((s) => ({ day: s.day, value: s.strain })),
+      range,
+    );
+    const forecastPoints = buildForecast({
+      recovery: recoveryDense,
+      strain: strainDense,
+      debt: sleepDebt(sleepNights(sleep, range)).map((p) => ({
+        day: p.day,
+        value: p.debtMilli,
+      })),
+      acwr: acwrSeries(strainDense).map((p) => ({ day: p.day, value: p.ratio })),
+      hrv: densify(
+        recovery.map((r) => ({ day: r.day, value: r.hrvRmssdMilli })),
+        range,
+      ),
+    });
+    forecast = currentForecast(forecastPoints);
+    backtest = backtestForecast(forecastPoints, recoveryDense);
   } catch (e) {
     setupError =
       e instanceof Error ? e.message : "Could not reach the database.";
@@ -141,12 +181,44 @@ export default async function OverviewPage({
               <MetricCard key={m.label} {...m} />
             ))}
           </section>
-          {radar && <EarlyWarningCard radar={radar} />}
+          {(radar || forecast) && (
+            <section className="grid gap-6 lg:grid-cols-2">
+              {forecast && backtest && (
+                <ForecastCard forecast={forecast} backtest={backtest} />
+              )}
+              {radar && <EarlyWarningCard radar={radar} />}
+            </section>
+          )}
           <ConnectionCard connected={connected} />
           {summary && <DataSummaryGrid summary={summary} />}
         </div>
       )}
     </div>
+  );
+}
+
+function ForecastCard({
+  forecast,
+  backtest,
+}: {
+  forecast: ForecastPoint;
+  backtest: BacktestResult;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CalendarClock className="size-4" /> Tomorrow&apos;s recovery
+        </CardTitle>
+        <CardDescription>
+          Predicted from today&apos;s strain, sleep debt, training load, and HRV
+          trend vs your baselines.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <RecoveryForecast forecast={forecast} backtest={backtest} />
+      </CardContent>
+    </Card>
   );
 }
 
