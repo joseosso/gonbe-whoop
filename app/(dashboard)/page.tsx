@@ -10,13 +10,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { SyncButton } from "@/components/sync-button";
+import { formatRangeLabel, parseRange } from "@/lib/date-range";
 import { getDataSummary, type DataSummary } from "@/lib/db/queries";
 import { isConnected } from "@/lib/whoop/oauth";
 
 // Reads live DB state on every request — never prerender.
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function OverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string }>;
+}) {
+  const range = parseRange(await searchParams);
+
   let connected = false;
   let summary: DataSummary | null = null;
   let setupError: string | null = null;
@@ -24,15 +31,16 @@ export default async function Home() {
   try {
     [connected, summary] = await Promise.all([isConnected(), getDataSummary()]);
   } catch (e) {
-    setupError = e instanceof Error ? e.message : "Could not reach the database.";
+    setupError =
+      e instanceof Error ? e.message : "Could not reach the database.";
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-6 py-12">
-      <header className="mb-10">
-        <h1 className="text-3xl font-semibold tracking-tight">Whoop Insights</h1>
-        <p className="text-muted-foreground mt-1">
-          Trends, comparisons, and decision-support from your WHOOP data.
+    <div className="flex flex-col gap-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Showing {formatRangeLabel(range)}.
         </p>
       </header>
 
@@ -44,7 +52,7 @@ export default async function Home() {
           {summary && <DataSummaryGrid summary={summary} />}
         </div>
       )}
-    </main>
+    </div>
   );
 }
 
@@ -118,8 +126,8 @@ function SetupCard({ error }: { error: string }) {
       <CardHeader>
         <CardTitle>Setup needed</CardTitle>
         <CardDescription>
-          The database isn&apos;t reachable yet. Set <code>DATABASE_URL</code> and
-          the WHOOP credentials in <code>.env.local</code>, then run{" "}
+          The database isn&apos;t reachable yet. Set <code>DATABASE_URL</code>{" "}
+          and the WHOOP credentials in <code>.env.local</code>, then run{" "}
           <code>npm run db:push</code>. See <code>SPEC.md</code> §8.
         </CardDescription>
       </CardHeader>
