@@ -1,6 +1,5 @@
 "use client";
 
-import { format, parseISO } from "date-fns";
 import {
   Area,
   CartesianGrid,
@@ -15,6 +14,7 @@ import {
 import type { TrendPoint } from "@/lib/analytics/trend";
 import type { EventRow } from "@/lib/analytics/types";
 import { eventReferences } from "./event-overlay";
+import { longDay, shortDay, tooltipStyle } from "./format";
 
 export interface TrendChartProps {
   data: TrendPoint[];
@@ -24,8 +24,6 @@ export interface TrendChartProps {
   /** Life events to overlay, clamped to the chart's day range. */
   events?: EventRow[];
 }
-
-const shortDay = (day: string) => format(parseISO(day), "MMM d");
 
 /**
  * Raw series with an EWMA overlay and a shaded trailing baseline ± SD band
@@ -73,11 +71,7 @@ export function TrendChart({
         />
         <Tooltip
           isAnimationActive={false}
-          labelFormatter={(label) =>
-            typeof label === "string"
-              ? format(parseISO(label), "EEE, MMM d")
-              : ""
-          }
+          labelFormatter={longDay}
           formatter={(value, name) => {
             if (Array.isArray(value)) {
               return [
@@ -87,12 +81,7 @@ export function TrendChart({
             }
             return [fmt(Number(value)), name === "ewma" ? "EWMA" : "Raw"];
           }}
-          contentStyle={{
-            background: "var(--popover)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)",
-            fontSize: "0.75rem",
-          }}
+          contentStyle={tooltipStyle}
         />
         {/* Baseline ± SD band: a range area ([low, high] per point). */}
         <Area

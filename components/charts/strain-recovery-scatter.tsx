@@ -16,13 +16,7 @@ import {
   LOW_RECOVERY,
   type StrainRecoveryPoint,
 } from "@/lib/analytics/strain-balance";
-
-const tooltipStyle = {
-  background: "var(--popover)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius-md)",
-  fontSize: "0.75rem",
-} as const;
+import { tooltipStyle } from "./format";
 
 /**
  * Same-day strain vs. recovery. The shaded quadrant (high strain, low recovery)

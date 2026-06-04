@@ -1,6 +1,5 @@
 "use client";
 
-import { format, parseISO } from "date-fns";
 import {
   Bar,
   BarChart,
@@ -13,10 +12,7 @@ import {
 
 import type { EventRow } from "@/lib/analytics/types";
 import { eventReferences } from "./event-overlay";
-
-const shortDay = (day: string) => format(parseISO(day), "MMM d");
-const longDay = (label: unknown) =>
-  typeof label === "string" ? format(parseISO(label), "EEE, MMM d") : "";
+import { longDay, shortDay, tooltipStyle } from "./format";
 
 /** Per-day HR-zone minutes (zone 0 → 5), summed across that day's workouts. */
 export interface ZonePoint {
@@ -86,12 +82,7 @@ export function HrZoneBar({
             mins(Number(value)),
             ZONES.find((z) => z.key === name)?.label ?? String(name),
           ]}
-          contentStyle={{
-            background: "var(--popover)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)",
-            fontSize: "0.75rem",
-          }}
+          contentStyle={tooltipStyle}
         />
         {ZONES.map((z) => (
           <Bar

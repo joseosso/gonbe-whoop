@@ -1,6 +1,5 @@
 "use client";
 
-import { format, parseISO } from "date-fns";
 import {
   Area,
   AreaChart,
@@ -14,17 +13,7 @@ import {
 
 import type { EventRow } from "@/lib/analytics/types";
 import { eventReferences } from "./event-overlay";
-
-const shortDay = (day: string) => format(parseISO(day), "MMM d");
-const longDay = (label: unknown) =>
-  typeof label === "string" ? format(parseISO(label), "EEE, MMM d") : "";
-
-const tooltipStyle = {
-  background: "var(--popover)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius-md)",
-  fontSize: "0.75rem",
-} as const;
+import { longDay, shortDay, tooltipStyle } from "./format";
 
 /** One night's sleep stages, in hours (null on nights with no sleep). */
 export interface StagePoint {
@@ -52,7 +41,15 @@ export function SleepStagesChart({
   data: StagePoint[];
   events?: EventRow[];
 }) {
-  if (!data.some((d) => d.light !== null)) {
+  if (
+    !data.some(
+      (d) =>
+        d.light !== null ||
+        d.sws !== null ||
+        d.rem !== null ||
+        d.awake !== null,
+    )
+  ) {
     return (
       <p className="text-muted-foreground py-12 text-center text-sm">
         No sleep in range.

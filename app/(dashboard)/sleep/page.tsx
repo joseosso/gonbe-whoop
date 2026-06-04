@@ -12,11 +12,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { format, parseISO, subDays } from "date-fns";
+
 import { eachDay, localClockMinutes } from "@/lib/analytics/dates";
 import { regularityIndex, type Regularity } from "@/lib/analytics/regularity";
-import { sleepDebt, type SleepNight } from "@/lib/analytics/sleep-debt";
+import {
+  sleepDebt,
+  SLEEP_DEBT_WINDOW,
+  type SleepNight,
+} from "@/lib/analytics/sleep-debt";
 import { buildTrend, type TrendPoint } from "@/lib/analytics/trend";
-import type { EventRow } from "@/lib/analytics/types";
+import type { DayRange, EventRow } from "@/lib/analytics/types";
 import {
   clampEventsToRange,
   formatRangeLabel,
@@ -51,17 +57,28 @@ export default async function SleepPage({
   let events: EventRow[] = [];
   let error: string | null = null;
 
+  // Debt is a trailing-window sum, so include the days just before `range` —
+  // otherwise the first ~2 weeks of the chart would undercount.
+  const debtRange: DayRange = {
+    from: format(
+      subDays(parseISO(range.from), SLEEP_DEBT_WINDOW - 1),
+      "yyyy-MM-dd",
+    ),
+    to: range.to,
+  };
+
   try {
-    const [sleeps, eventRows] = await Promise.all([
+    const [sleeps, debtSleeps, eventRows] = await Promise.all([
       getSleepSeries(range),
+      getSleepSeries(debtRange),
       getEvents(range),
     ]);
     events = clampEventsToRange(eventRows, range);
-    const byDay = new Map(sleeps.map((s) => [s.day, s]));
+    const sleepByDay = new Map(sleeps.map((s) => [s.day, s]));
     const days = eachDay(range);
 
     stages = days.map((day) => {
-      const s = byDay.get(day);
+      const s = sleepByDay.get(day);
       return {
         day,
         light: s ? toHours(s.lightMilli) : null,
@@ -71,8 +88,9 @@ export default async function SleepPage({
       };
     });
 
-    const nights: SleepNight[] = days.map((day) => {
-      const s = byDay.get(day);
+    const debtByDay = new Map(debtSleeps.map((s) => [s.day, s]));
+    const nights: SleepNight[] = eachDay(debtRange).map((day) => {
+      const s = debtByDay.get(day);
       return {
         day,
         needMilli: s
@@ -87,10 +105,12 @@ export default async function SleepPage({
           : null,
       };
     });
-    debt = sleepDebt(nights).map((p) => ({
-      day: p.day,
-      hours: toHours(p.debtMilli),
-    }));
+    debt = sleepDebt(nights)
+      .filter((p) => p.day >= range.from) // drop the pre-range warm-up days
+      .map((p) => ({
+        day: p.day,
+        hours: toHours(p.debtMilli),
+      }));
 
     performance = buildTrend(
       sleeps.map((s) => ({ day: s.day, value: s.performancePct })),
