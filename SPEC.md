@@ -42,7 +42,7 @@ insights that the WHOOP app itself doesn't give you.
 │    /api/sync              → pull v2 data, upsert to DB     │
 │                                                            │
 │  Server Components read directly from Postgres (Drizzle)   │
-│  Client Components render charts (Recharts / nivo)         │
+│  Client Components render charts (Recharts / d3)           │
 └───────────────┬─────────────────────────┬──────────────────┘
                 │                          │
          WHOOP API v2                Supabase Postgres
@@ -52,12 +52,12 @@ insights that the WHOOP app itself doesn't give you.
 ### Stack decisions
 | Concern | Choice | Why |
 |---|---|---|
-| Framework | **Next.js 15 App Router**, TypeScript | Requested; server components read DB directly |
+| Framework | **Next.js 16 App Router**, TypeScript (React 19) | Requested; server components read DB directly |
 | Styling | **Tailwind CSS + shadcn/ui** | Requested; minimalist modern UI |
 | DB access | **Drizzle ORM** (`postgres` driver) | Type-safe analytics queries + migrations |
 | DB | **Supabase Postgres** (free tier) | Requested; durable local cache of Whoop data |
 | Standard charts | **shadcn charts (Recharts)** | First-class shadcn integration, themed cards/lines |
-| Specialized charts | **visx** (`@visx/*`) | Low-level D3 primitives → bespoke, animated calendar heatmap, correlation matrix, radial/scatter |
+| Specialized charts | **d3** primitives (`d3-scale`, `d3-shape`, …) | Bespoke, animated calendar heatmap / correlation matrix; React-19-safe (no peer-dep conflict, unlike visx) |
 | Dates | **date-fns** + `date-fns-tz` | Timezone-correct day bucketing |
 | Validation | **zod** | Validate Whoop API payloads at the boundary |
 
@@ -300,7 +300,7 @@ rule-based digest.
 
 ### Phase 1 — Core dashboards (exploratory viz)
 - **Overview**: recovery / strain / sleep cards vs 30-day baseline with z-score band.
-- **Recovery calendar heatmap** (custom visx, color = recovery).
+- **Recovery calendar heatmap** (custom d3 + SVG, color = recovery).
 - **HRV & RHR trends**: raw + EWMA + 30-day band.
 - **Sleep dashboard**: stacked-area stages, performance/efficiency trends,
   **sleep debt** chart, **regularity** score.
@@ -354,7 +354,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 
 ## 9. Resolved decisions
 - **Data layer:** Drizzle ORM over Supabase Postgres. ✅
-- **Visualization:** shadcn/Recharts for standard charts; **visx** for the
+- **Visualization:** shadcn/Recharts for standard charts; **d3** primitives for the
   bespoke/specialized ones (calendar heatmap, correlation matrix). ✅
 - **Initial tag vocabulary** for `day_tags`: **travel, sick, stress** on day one
   (schema/UI allow adding more later). ✅
