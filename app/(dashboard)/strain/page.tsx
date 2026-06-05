@@ -1,4 +1,5 @@
 import { AcwrGauge } from "@/components/charts/acwr-gauge";
+import { AerobicEfficiencyChart } from "@/components/charts/aerobic-efficiency";
 import { FitnessFormChart } from "@/components/charts/fitness-form";
 import { HrZoneBar, type ZonePoint } from "@/components/charts/hr-zone-bar";
 import { StrainBudget } from "@/components/charts/strain-budget";
@@ -22,6 +23,10 @@ import {
   type AcwrPoint,
   type PriorLoads,
 } from "@/lib/analytics/acwr";
+import {
+  aerobicEfficiency,
+  type AerobicEfficiency,
+} from "@/lib/analytics/aerobic-efficiency";
 import { densify, eachDay } from "@/lib/analytics/dates";
 import {
   currentForm,
@@ -77,6 +82,7 @@ export default async function StrainPage({
   let formNow: FormPoint | null = null;
   let roi: SportRoi[] = [];
   let zoneDist: ZoneDistribution | null = null;
+  let efficiency: AerobicEfficiency | null = null;
   let events: EventRow[] = [];
   let error: string | null = null;
 
@@ -142,6 +148,13 @@ export default async function StrainPage({
 
     // Polarized split: HR-zone time folded into low/gray/high vs the 80/20 target.
     zoneDist = zoneDistribution(workouts);
+
+    // Aerobic efficiency: output-per-HR trend for the dominant comparable sport,
+    // with resting-HR / HRV baselines as a confirming signal.
+    efficiency = aerobicEfficiency(workouts, {
+      restingHr: recovery.map((r) => ({ day: r.day, value: r.restingHr })),
+      hrv: recovery.map((r) => ({ day: r.day, value: r.hrvRmssdMilli })),
+    });
 
     // Per-day HR-zone minutes, summed across that day's workouts.
     const zoneByDay = new Map<string, number[]>();
@@ -291,6 +304,21 @@ export default async function StrainPage({
               <WorkoutRoi data={roi} />
             </CardContent>
           </Card>
+
+          {efficiency && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Aerobic efficiency</CardTitle>
+                <CardDescription>
+                  Output per heartbeat for steady efforts over time — rising
+                  means the same work at a lower HR, an improving aerobic base.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AerobicEfficiencyChart data={efficiency} />
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>
