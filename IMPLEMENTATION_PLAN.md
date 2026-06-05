@@ -308,6 +308,98 @@ baselines, all unit-tested.
 
 ---
 
+## Phase 5 — Training-performance layer
+
+Goal: turn the descriptive/predictive analytics into a **training-performance
+coach** — one daily directive, a periodization model to time a peak, and three
+views that answer questions WHOOP hides ("which sessions are worth it?", "is my
+intensity mix right?", "am I actually getting fitter?"). Constraints, by design:
+**WHOOP-only** (no new external data), **deterministic** (no LLM — an optional
+prose layer can wrap these later, as in §2.5), all analytics pure + unit-tested.
+Ordered by value-per-effort. Every step reuses Phase 1–4 primitives (`ewma`,
+`rollingBaseline`, `zScore`, the inverted-ACWR math from §4.1, the next-day join
+from §2.3, `insights_cache`).
+
+### 5.1 Morning Training Brief (deterministic coach)
+- **Files:** `lib/insights/brief.ts` (pure rules, + tests),
+  `lib/db/queries.ts` (read/write `insights_cache`, reuse §2.5 pattern),
+  `components/charts/training-brief.tsx`, surfaced as the top card on Overview;
+  optional `app/api/brief/route.ts` (generate) for a scheduled morning run.
+- **Approach:** Fuse the engines already built into a single actionable
+  directive. Combine today's recovery band, tomorrow's forecast (§4.3), the
+  safe-strain budget / ceiling (§4.1), the illness/early-warning radar (§4.2),
+  ACWR status (§2.4), and sleep-debt direction (§1.6) through a transparent
+  decision tree → `{ verdict: hard|moderate|easy|rest, strainCeiling, reasons[],
+  flags[] }`. Render as a "what to do today" card with the contributing reasons
+  shown (explainable, not a black box). Cache per local day so a morning brief is
+  cheap and stable; regeneration idempotent.
+- **Exit:** `brief.ts` unit-tested (each verdict path, ceiling clamp at the
+  WHOOP max of 21, flag precedence — illness watch downgrades verdict, thin
+  history → conservative default); Overview shows today's directive with reasons;
+  cached row per day, idempotent. Lowest effort, highest payoff (pure
+  orchestration of existing functions; also the morning-brief delivery seam).
+
+### 5.2 Fitness–Fatigue–Form model (CTL/ATL/TSB on strain)
+- **Files:** `lib/analytics/fitness-form.ts` (+ tests),
+  `components/charts/fitness-form.tsx`, a new section on Strain (or its own
+  `app/(dashboard)/form/page.tsx`).
+- **Approach:** Impulse-response model over daily strain (the TrainingPeaks
+  CTL/ATL/TSB concept WHOOP omits). Fitness = long EWMA of strain (≈42-day),
+  Fatigue = short EWMA (≈7-day), Form = Fitness − Fatigue. Reuse `ewma.ts`
+  (null-gap aware). Three overlaid lines + fresh/neutral/fatigued bands. Natural
+  extension — a **forward taper planner**: given a goal date, back-solve a
+  week-by-week strain target band that arrives Form-positive while keeping ACWR
+  in-band (reuse the inverted-ACWR solver from §4.1).
+- **Exit:** `fitness-form.ts` unit-tested (steady-state convergence, decay after
+  a hard block, Form sign at a known fixture, null-gap handling); chart renders
+  the three series with status bands; planner (if built) produces a weekly target
+  series for a future date, tested at boundaries.
+
+### 5.3 Workout ROI — recovery cost per session
+- **Files:** `lib/analytics/workout-roi.ts` (+ tests),
+  `components/charts/workout-roi.tsx`, surfaced on Strain.
+- **Approach:** Rank session types by adaptation bought vs recovery spent. For
+  each workout, join to the **next-day recovery delta vs baseline** (reuse the
+  §2.3 next-day join + `rollingBaseline`); group by `sport_name`; compute
+  recovery-cost-per-strain (and per-kilojoule) with `n` and spread per group.
+  Small-n groups flagged low-confidence per the spec's statistical-honesty rule.
+  Render as ranked bars ("strength: −9 recovery/strain; Zone-2 run: −3").
+- **Exit:** `workout-roi.ts` unit-tested (next-day alignment, grouping, cost
+  ratio, n-guard, NaN-safe on missing recovery); Strain page ranks sport types by
+  cost with confidence guarding.
+
+### 5.4 Polarized-training / zone-distribution analyzer
+- **Files:** `lib/analytics/zone-distribution.ts` (+ tests),
+  `components/charts/zone-distribution.tsx`, surfaced on Strain.
+- **Approach:** Aggregate the per-workout HR-zone durations (`zone0..5_milli`,
+  already synced but only shown per-workout) across the selected range → percent
+  time per zone → compare to the polarized 80/20 target and flag the "gray zone"
+  (threshold) share. Pure aggregation; honest about total time analyzed.
+- **Exit:** `zone-distribution.ts` unit-tested (summation across workouts, percent
+  normalization, empty/partial-zone guard); Strain shows actual vs ideal
+  distribution with the gray-zone flag.
+
+### 5.5 Aerobic efficiency tracker
+- **Files:** `lib/analytics/aerobic-efficiency.ts` (+ tests),
+  `components/charts/aerobic-efficiency.tsx`, surfaced on Strain.
+- **Approach:** An objective fitness signal WHOOP doesn't expose: for comparable
+  steady efforts (same `sport_name`, similar zone profile), track strain (or
+  kilojoule) **per average HR** over time — same output at a lower HR = improving
+  aerobic base. Smooth with `ewma`. Optionally fuse a declining RHR + rising HRV
+  baseline as a confirming second signal. Output a monthly efficiency-index trend.
+- **Exit:** `aerobic-efficiency.ts` unit-tested (comparable-workout filtering,
+  per-HR ratio, EWMA smoothing, n-guard so sparse months aren't over-claimed);
+  Strain shows an efficiency trend with the confirming signals.
+
+**Phase 5 exit criteria:** A daily Morning Training Brief prescribes today's
+session and strain ceiling from all prior engines; a Fitness/Fatigue/Form model
+(optionally with a taper planner) lets you time a peak; and Workout-ROI,
+zone-distribution, and aerobic-efficiency views answer which sessions are worth
+it, whether the intensity mix is right, and whether fitness is actually
+improving — all WHOOP-only, deterministic, and unit-tested.
+
+---
+
 ## Suggested build order
 
 1. **C1–C4** (test harness, types, query layer, date-fns) — unblocks everything.
@@ -315,7 +407,9 @@ baselines, all unit-tested.
 3. **Phase 2** 2.1 → 2.5 — the differentiated insight value.
 4. **Phase 4** 4.1 → 4.5 — decision-support & predictive insights (builds on the
    Phase 1–2 analytics; independent of the Phase 3 deploy work).
-5. **Phase 3** — only when deploying.
+5. **Phase 5** 5.1 → 5.5 — training-performance layer (builds on the Phase 1–4
+   analytics; WHOOP-only + deterministic; independent of the Phase 3 deploy work).
+6. **Phase 3** — only when deploying.
 
 ## Conventions reminder
 - No `any`; validate external data with zod at the boundary; let Drizzle infer DB

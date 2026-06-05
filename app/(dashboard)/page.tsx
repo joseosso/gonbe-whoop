@@ -14,6 +14,7 @@ import {
 } from "@/components/charts/metric-card";
 import { RecoveryForecast } from "@/components/charts/recovery-forecast";
 import { StrainRadar } from "@/components/charts/strain-radar";
+import { TrainingBrief } from "@/components/charts/training-brief";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,8 @@ import {
   type ForecastPoint,
 } from "@/lib/analytics/forecast";
 import { summarizeMetric } from "@/lib/analytics/overview";
+import { loadBrief } from "@/lib/insights/brief-data";
+import type { BriefPayload } from "@/lib/insights/brief";
 import { sleepDebt, sleepNights } from "@/lib/analytics/sleep-debt";
 import {
   buildRadar,
@@ -56,7 +59,7 @@ export const dynamic = "force-dynamic";
 
 type Metric = Pick<
   MetricCardProps,
-  "label" | "unit" | "precision" | "series" | "summary"
+  "label" | "unit" | "precision" | "series" | "summary" | "accent" | "direction"
 >;
 
 const metric = (
@@ -64,12 +67,16 @@ const metric = (
   unit: string,
   precision: number,
   series: DaySeries,
+  accent: MetricCardProps["accent"],
+  direction: MetricCardProps["direction"],
 ): Metric => ({
   label,
   unit,
   precision,
   series,
   summary: summarizeMetric(series),
+  accent,
+  direction,
 });
 
 export default async function OverviewPage({
@@ -85,18 +92,24 @@ export default async function OverviewPage({
   let radar: RadarResult | null = null;
   let forecast: ForecastPoint | null = null;
   let backtest: BacktestResult | null = null;
+  let brief: BriefPayload | null = null;
   let setupError: string | null = null;
 
   try {
-    const [conn, sum, recovery, strain, sleep] = await Promise.all([
-      isConnected(),
-      getDataSummary(),
-      getRecoverySeries(range),
-      getStrainSeries(range),
-      getSleepSeries(range),
-    ]);
+    const [conn, sum, recovery, strain, sleep, briefPayload] =
+      await Promise.all([
+        isConnected(),
+        getDataSummary(),
+        getRecoverySeries(range),
+        getStrainSeries(range),
+        getSleepSeries(range),
+        // Today-anchored, independent of the selected range, so the call is
+        // always current with stable baselines.
+        loadBrief(),
+      ]);
     connected = conn;
     summary = sum;
+    brief = briefPayload;
 
     metrics = [
       metric(
@@ -107,6 +120,8 @@ export default async function OverviewPage({
           recovery.map((r) => ({ day: r.day, value: r.recoveryScore })),
           range,
         ),
+        "emerald",
+        "up",
       ),
       metric(
         "Day Strain",
@@ -116,6 +131,8 @@ export default async function OverviewPage({
           strain.map((r) => ({ day: r.day, value: r.strain })),
           range,
         ),
+        "sky",
+        "neutral",
       ),
       metric(
         "Sleep Performance",
@@ -125,6 +142,8 @@ export default async function OverviewPage({
           sleep.map((r) => ({ day: r.day, value: r.performancePct })),
           range,
         ),
+        "violet",
+        "up",
       ),
     ];
 
@@ -176,6 +195,7 @@ export default async function OverviewPage({
         <SetupCard error={setupError} />
       ) : (
         <div className="flex flex-col gap-6">
+          {brief && <TrainingBrief payload={brief} />}
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {metrics.map((m) => (
               <MetricCard key={m.label} {...m} />
