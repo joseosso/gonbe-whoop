@@ -1,8 +1,10 @@
 import { AcwrGauge } from "@/components/charts/acwr-gauge";
+import { FitnessFormChart } from "@/components/charts/fitness-form";
 import { HrZoneBar, type ZonePoint } from "@/components/charts/hr-zone-bar";
 import { StrainBudget } from "@/components/charts/strain-budget";
 import { StrainRecoveryScatter } from "@/components/charts/strain-recovery-scatter";
 import { TrendChart } from "@/components/charts/trend-chart";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -19,6 +21,13 @@ import {
   type PriorLoads,
 } from "@/lib/analytics/acwr";
 import { densify, eachDay } from "@/lib/analytics/dates";
+import {
+  currentForm,
+  fitnessForm,
+  formStatus,
+  type FormPoint,
+  type FormStatus,
+} from "@/lib/analytics/fitness-form";
 import { summarizeMetric } from "@/lib/analytics/overview";
 import {
   flagStrainRecovery,
@@ -57,6 +66,8 @@ export default async function StrainPage({
   let acwr: AcwrPoint | null = null;
   let strainPrior: PriorLoads | null = null;
   let hrvZ: number | null = null;
+  let form: FormPoint[] = [];
+  let formNow: FormPoint | null = null;
   let events: EventRow[] = [];
   let error: string | null = null;
 
@@ -85,6 +96,9 @@ export default async function StrainPage({
     // Prior loads for the safe-strain budget (forward what-if), anchored on the
     // last day in range (today, on the default range).
     strainPrior = priorLoads(strainDense);
+    // Fitness / Fatigue / Form (CTL/ATL/TSB) over the same densified strain.
+    form = fitnessForm(strainDense);
+    formNow = currentForm(form);
     // HRV deviation from its own 30-day baseline, as a supporting signal.
     hrvZ = summarizeMetric(
       densify(
@@ -181,6 +195,24 @@ export default async function StrainPage({
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <CardTitle>Fitness, fatigue &amp; form</CardTitle>
+                  <CardDescription>
+                    Slow (42d) vs fast (7d) strain load. Form = fitness − fatigue:
+                    positive is fresh, negative is fatigued.
+                  </CardDescription>
+                </div>
+                <FormBadge point={formNow} />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <FitnessFormChart data={form} events={events} />
+            </CardContent>
+          </Card>
+
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
@@ -211,5 +243,30 @@ export default async function StrainPage({
         </>
       )}
     </div>
+  );
+}
+
+const FORM_BADGE: Record<FormStatus, { label: string; className: string }> = {
+  fresh: {
+    label: "Fresh",
+    className: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  },
+  neutral: { label: "Neutral", className: "bg-muted text-muted-foreground" },
+  fatigued: {
+    label: "Fatigued",
+    className: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  },
+};
+
+/** Current form status + value, derived from the latest computable point. */
+function FormBadge({ point }: { point: FormPoint | null }) {
+  const status = point ? formStatus(point) : null;
+  if (!status || point?.form == null) return null;
+  const { label, className } = FORM_BADGE[status];
+  const value = `${point.form >= 0 ? "+" : ""}${point.form.toFixed(1)}`;
+  return (
+    <Badge variant="secondary" className={`shrink-0 tabular-nums ${className}`}>
+      {label} · form {value}
+    </Badge>
   );
 }
