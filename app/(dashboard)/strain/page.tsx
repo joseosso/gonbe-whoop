@@ -5,6 +5,7 @@ import { StrainBudget } from "@/components/charts/strain-budget";
 import { StrainRecoveryScatter } from "@/components/charts/strain-recovery-scatter";
 import { TrendChart } from "@/components/charts/trend-chart";
 import { WorkoutRoi } from "@/components/charts/workout-roi";
+import { ZoneDistributionChart } from "@/components/charts/zone-distribution";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -37,6 +38,10 @@ import {
 import { buildTrend, type TrendPoint } from "@/lib/analytics/trend";
 import type { EventRow } from "@/lib/analytics/types";
 import { type SportRoi, workoutRoi } from "@/lib/analytics/workout-roi";
+import {
+  type ZoneDistribution,
+  zoneDistribution,
+} from "@/lib/analytics/zone-distribution";
 import {
   clampEventsToRange,
   formatRangeLabel,
@@ -71,6 +76,7 @@ export default async function StrainPage({
   let form: FormPoint[] = [];
   let formNow: FormPoint | null = null;
   let roi: SportRoi[] = [];
+  let zoneDist: ZoneDistribution | null = null;
   let events: EventRow[] = [];
   let error: string | null = null;
 
@@ -133,6 +139,9 @@ export default async function StrainPage({
         range,
       ),
     );
+
+    // Polarized split: HR-zone time folded into low/gray/high vs the 80/20 target.
+    zoneDist = zoneDistribution(workouts);
 
     // Per-day HR-zone minutes, summed across that day's workouts.
     const zoneByDay = new Map<string, number[]>();
@@ -253,6 +262,21 @@ export default async function StrainPage({
               </CardContent>
             </Card>
           </div>
+
+          {zoneDist && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Polarized training</CardTitle>
+                <CardDescription>
+                  Time by intensity band vs the 80/20 target. Most volume should
+                  be easy; little should sit in the threshold gray zone.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ZoneDistributionChart data={zoneDist} />
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
