@@ -4,6 +4,7 @@ import { HrZoneBar, type ZonePoint } from "@/components/charts/hr-zone-bar";
 import { StrainBudget } from "@/components/charts/strain-budget";
 import { StrainRecoveryScatter } from "@/components/charts/strain-recovery-scatter";
 import { TrendChart } from "@/components/charts/trend-chart";
+import { WorkoutRoi } from "@/components/charts/workout-roi";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/analytics/strain-balance";
 import { buildTrend, type TrendPoint } from "@/lib/analytics/trend";
 import type { EventRow } from "@/lib/analytics/types";
+import { type SportRoi, workoutRoi } from "@/lib/analytics/workout-roi";
 import {
   clampEventsToRange,
   formatRangeLabel,
@@ -68,6 +70,7 @@ export default async function StrainPage({
   let hrvZ: number | null = null;
   let form: FormPoint[] = [];
   let formNow: FormPoint | null = null;
+  let roi: SportRoi[] = [];
   let events: EventRow[] = [];
   let error: string | null = null;
 
@@ -120,6 +123,16 @@ export default async function StrainPage({
       }),
     );
     flaggedCount = scatter.filter((p) => p.flagged).length;
+
+    // Recovery cost per session: each workout's next-day recovery vs its
+    // trailing baseline, grouped and ranked by sport.
+    roi = workoutRoi(
+      workouts,
+      densify(
+        recovery.map((r) => ({ day: r.day, value: r.recoveryScore })),
+        range,
+      ),
+    );
 
     // Per-day HR-zone minutes, summed across that day's workouts.
     const zoneByDay = new Map<string, number[]>();
@@ -240,6 +253,20 @@ export default async function StrainPage({
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Workout ROI</CardTitle>
+              <CardDescription>
+                Recovery cost per session: next-day recovery vs baseline, per
+                unit strain, by sport. Negative (red) costs more recovery;
+                positive (green) recovers easy.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <WorkoutRoi data={roi} />
+            </CardContent>
+          </Card>
         </>
       )}
     </div>
