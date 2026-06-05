@@ -28,6 +28,10 @@ export function DashboardNav() {
         <Link
           key={href}
           href={qs ? `${href}?${qs}` : href}
+          // Every tab is a force-dynamic, DB-heavy route. Default prefetch would
+          // fire all nine RSC renders at once on each page load, stampeding the
+          // Supabase pooler. Prefetch on intent (hover/touch) instead.
+          prefetch={false}
           className={cn(
             "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
             pathname === href

@@ -36,30 +36,35 @@ export interface DataSummary {
   lastSynced: Date | null;
 }
 
-/** Row counts + most recent sync time, for the dashboard status panel. */
+/**
+ * Row counts + most recent sync time, for the dashboard status panel. One round
+ * trip: the Supabase transaction pooler serializes queries, so five separate
+ * counts here turn the Overview render into five sequential pooler hops.
+ */
 export async function getDataSummary(): Promise<DataSummary> {
-  const [cycleCount, recoveryCount, sleepCount, workoutCount, states] =
-    await Promise.all([
-      db.$count(cycles),
-      db.$count(recoveries),
-      db.$count(sleeps),
-      db.$count(workouts),
-      db.select().from(syncState),
-    ]);
-
-  const lastSynced = states
-    .map((s) => s.lastSynced)
-    .filter((d): d is Date => d !== null)
-    .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+  const [row] = await db.execute<{
+    cycles: number;
+    recoveries: number;
+    sleeps: number;
+    workouts: number;
+    last_synced: Date | null;
+  }>(sql`
+    select
+      (select count(*) from ${cycles})::int as cycles,
+      (select count(*) from ${recoveries})::int as recoveries,
+      (select count(*) from ${sleeps})::int as sleeps,
+      (select count(*) from ${workouts})::int as workouts,
+      (select max(${syncState.lastSynced}) from ${syncState}) as last_synced
+  `);
 
   return {
     counts: {
-      cycles: cycleCount,
-      recoveries: recoveryCount,
-      sleeps: sleepCount,
-      workouts: workoutCount,
+      cycles: row.cycles,
+      recoveries: row.recoveries,
+      sleeps: row.sleeps,
+      workouts: row.workouts,
     },
-    lastSynced,
+    lastSynced: row.last_synced ? new Date(row.last_synced) : null,
   };
 }
 
