@@ -15,8 +15,12 @@ export type InsightSeverity = "positive" | "neutral" | "watch" | "alert";
 export interface InsightCard {
   /** Stable key (one per rule), so re-rendering/diffing is predictable. */
   id: string;
+  /** Headline — the "what changed". */
   title: string;
+  /** Context behind the headline — the numbers/explanation. */
   detail: string;
+  /** Optional recommendation — the "what to do". Omitted when there's nothing to act on. */
+  action?: string;
   severity: InsightSeverity;
 }
 
@@ -94,7 +98,8 @@ const recoveryTrend: Rule = ({ recovery }) => {
       id: "recovery-trend",
       severity: "positive",
       title: `Recovery up ${r0(delta)}pp vs last week`,
-      detail: `Averaged ${r0(thisWeek)}%. A good window to absorb a little more load.`,
+      detail: `Averaged ${r0(thisWeek)}% this week.`,
+      action: "A good window to absorb a little more load.",
     };
   }
   if (delta <= -RECOVERY_DELTA_PP) {
@@ -102,7 +107,8 @@ const recoveryTrend: Rule = ({ recovery }) => {
       id: "recovery-trend",
       severity: "watch",
       title: `Recovery down ${r0(-delta)}pp vs last week`,
-      detail: `Averaged ${r0(thisWeek)}%. Prioritise sleep and ease intensity.`,
+      detail: `Averaged ${r0(thisWeek)}% this week.`,
+      action: "Prioritise sleep and ease intensity.",
     };
   }
   return {
@@ -139,7 +145,8 @@ const sleepDebtTrend: Rule = ({ sleepDebtHours }) => {
       id: "sleep-debt",
       severity: "watch",
       title: `Sleep debt up ${r1(change)}h`,
-      detail: `Now ${now}. Aim for earlier, more consistent bedtimes.`,
+      detail: `Now ${now}.`,
+      action: "Aim for earlier, more consistent bedtimes.",
     };
   }
   return {
@@ -152,7 +159,12 @@ const sleepDebtTrend: Rule = ({ sleepDebtHours }) => {
 
 const ACWR_COPY: Record<
   AcwrStatus,
-  { severity: InsightSeverity; title: (r: string) => string; detail: string }
+  {
+    severity: InsightSeverity;
+    title: (r: string) => string;
+    detail: string;
+    action?: string;
+  }
 > = {
   optimal: {
     severity: "positive",
@@ -162,17 +174,20 @@ const ACWR_COPY: Record<
   high: {
     severity: "watch",
     title: (r) => `Training load climbing (ACWR ${r})`,
-    detail: "Approaching the spike zone; keep week-on-week jumps small.",
+    detail: "Approaching the spike zone.",
+    action: "Keep week-on-week jumps small.",
   },
   elevated: {
     severity: "alert",
     title: (r) => `Training spike (ACWR ${r})`,
-    detail: "Above 1.5 — elevated injury/illness risk. Add recovery.",
+    detail: "Above 1.5 — elevated injury/illness risk.",
+    action: "Add recovery days and ease intensity.",
   },
   low: {
     severity: "neutral",
     title: (r) => `Training load light (ACWR ${r})`,
-    detail: "Below 0.8 — room to build if you're feeling healthy.",
+    detail: "Below 0.8 — plenty of headroom.",
+    action: "Room to build if you're feeling healthy.",
   },
 };
 
@@ -185,6 +200,7 @@ const acwrStatusRule: Rule = ({ acwr }) => {
     severity: copy.severity,
     title: copy.title(ratio.toFixed(2)),
     detail: copy.detail,
+    action: copy.action,
   };
 };
 
@@ -210,8 +226,9 @@ const dayOfWeekRule: Rule = ({ dayOfWeek }) => {
     title: `${name}s run ${r0(Math.abs(delta))}pp ${dir} your average`,
     detail:
       delta < 0
-        ? `Across n=${n} ${name}s. Worth protecting recovery around then.`
+        ? `Across n=${n} ${name}s.`
         : `Across n=${n} ${name}s — a reliably strong day.`,
+    action: delta < 0 ? `Protect recovery around ${name}s.` : undefined,
   };
 };
 
@@ -226,6 +243,12 @@ const tagDriverRule: Rule = ({ tagDriver }) => {
     detail: `Next-day recovery delta over n=${n} tagged days.${
       lowConfidence ? " Low confidence — small sample." : ""
     }`,
+    // Don't issue guidance off a thin sample.
+    action: lowConfidence
+      ? undefined
+      : delta < 0
+        ? `Plan lighter loads around “${tag}” days.`
+        : `Lean into “${tag}” days when you can.`,
   };
 };
 
@@ -241,7 +264,8 @@ const earlyWarningRule: Rule = ({ earlyWarning }) => {
     title: `Early-warning: ${breachCount} body-stress signal${
       breachCount === 1 ? "" : "s"
     } off baseline`,
-    detail: `${list}. Ease load and watch for illness; recheck after a good night's sleep.`,
+    detail: `${list}.`,
+    action: "Ease load and watch for illness; recheck after a good night's sleep.",
   };
 };
 
