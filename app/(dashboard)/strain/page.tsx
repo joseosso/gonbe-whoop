@@ -1,4 +1,5 @@
 import { AcwrGauge } from "@/components/charts/acwr-gauge";
+import { AcwrTrendChart } from "@/components/charts/acwr-trend";
 import { AerobicEfficiencyChart } from "@/components/charts/aerobic-efficiency";
 import { FitnessFormChart } from "@/components/charts/fitness-form";
 import { HrZoneBar, type ZonePoint } from "@/components/charts/hr-zone-bar";
@@ -76,6 +77,7 @@ export default async function StrainPage({
   let zones: ZonePoint[] = [];
   let flaggedCount = 0;
   let acwr: AcwrPoint | null = null;
+  let acwrTrend: AcwrPoint[] = [];
   let strainPrior: PriorLoads | null = null;
   let hrvZ: number | null = null;
   let form: FormPoint[] = [];
@@ -107,7 +109,8 @@ export default async function StrainPage({
       strain.map((s) => ({ day: s.day, value: s.strain })),
       range,
     );
-    acwr = currentAcwr(acwrSeries(strainDense));
+    acwrTrend = acwrSeries(strainDense);
+    acwr = currentAcwr(acwrTrend);
     // Prior loads for the safe-strain budget (forward what-if), anchored on the
     // last day in range (today, on the default range).
     strainPrior = priorLoads(strainDense);
@@ -217,6 +220,19 @@ export default async function StrainPage({
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Sweet spot over time</CardTitle>
+              <CardDescription>
+                Acute:chronic ratio day by day against the sweet-spot zones.
+                Above the green band is overreaching; below it is undertraining.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AcwrTrendChart data={acwrTrend} events={events} />
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>
